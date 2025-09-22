@@ -45,30 +45,87 @@ export function Navigation() {
             >
               How It Works
             </Link>
-            <Link
-              href="/for-shippers"
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-            >
-              For Shippers
-            </Link>
-            <Link
-              href="/for-carriers"
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-            >
-              For Carriers
-            </Link>
-            <Link
-              href="/post-load"
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-            >
-              Post a Load
-            </Link>
-            <Link href="/download" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Download App
-            </Link>
-            <Link href="/pricing" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Pricing
-            </Link>
+            {/* Show different navigation based on authentication status */}
+            {!isAuthenticated ? (
+              <>
+                <Link
+                  href="/for-shippers"
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                >
+                  For Shippers
+                </Link>
+                <Link
+                  href="/for-carriers"
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                >
+                  For Carriers
+                </Link>
+                <Link
+                  href="/post-load"
+                  className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                >
+                  Post a Load
+                </Link>
+                <Link href="/download" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  Download App
+                </Link>
+                <Link href="/pricing" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  Pricing
+                </Link>
+              </>
+            ) : (
+              <>
+                {/* Role-specific navigation for authenticated users */}
+                {user?.role === 'shipper' && (
+                  <>
+                    <Link
+                      href="/dashboard/shipper/loads"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      My Loads
+                    </Link>
+                    <Link
+                      href="/dashboard/shipper/post-load"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      Post Load
+                    </Link>
+                  </>
+                )}
+                {user?.role === 'carrier' && (
+                  <>
+                    <Link
+                      href="/dashboard/carrier/loads"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      Find Loads
+                    </Link>
+                    <Link
+                      href="/dashboard/carrier/assigned"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      My Loads
+                    </Link>
+                  </>
+                )}
+                {user?.role === 'admin' && (
+                  <>
+                    <Link
+                      href="/dashboard/admin/users"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      Users
+                    </Link>
+                    <Link
+                      href="/dashboard/admin/loads"
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors"
+                    >
+                      All Loads
+                    </Link>
+                  </>
+                )}
+              </>
+            )}
             <Link href="/about" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               About Us
             </Link>

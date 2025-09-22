@@ -100,14 +100,23 @@ export const getAuthHeaders = (): Record<string, string> => {
 
 // Helper function for authenticated fetch
 export const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
+  const token = useAuthStore.getState().token;
+  console.log('fetchWithAuth called with URL:', url);
+  console.log('Token available:', !!token);
+  
   const headers = {
     'Content-Type': 'application/json',
     ...getAuthHeaders(),
     ...options.headers,
   };
 
-  return fetch(url, {
+  console.log('Request headers:', headers);
+
+  const response = await fetch(url, {
     ...options,
     headers,
   });
+
+  console.log('Response status:', response.status);
+  return response;
 };

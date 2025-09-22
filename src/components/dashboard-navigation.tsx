@@ -39,12 +39,47 @@ export function DashboardNavigation() {
             <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               Back to Home
             </Link>
-            <Link href="/dashboard" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+            <Link href={user?.role === 'shipper' ? "/dashboard/shipper" : "/dashboard/carrier"} className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               Dashboard
             </Link>
-            <Link href="/dashboard/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              My Loads
-            </Link>
+            
+            {/* Role-specific navigation */}
+            {user?.role === 'shipper' && (
+              <>
+                <Link href="/dashboard/shipper/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  My Loads
+                </Link>
+                <Link href="/dashboard/shipper/post-load" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  Post Load
+                </Link>
+              </>
+            )}
+            
+            {user?.role === 'carrier' && (
+              <>
+                <Link href="/dashboard/carrier/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  Available Loads
+                </Link>
+                <Link href="/dashboard/carrier/assigned" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  My Loads
+                </Link>
+              </>
+            )}
+            
+            {user?.role === 'admin' && (
+              <>
+                <Link href="/dashboard/admin/users" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  Manage Users
+                </Link>
+                <Link href="/dashboard/admin/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  All Loads
+                </Link>
+                <Link href="/dashboard/admin/reports" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  Reports
+                </Link>
+              </>
+            )}
+            
             <Link href="/dashboard/profile" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               Profile
             </Link>
@@ -117,13 +152,72 @@ export function DashboardNavigation() {
               >
                 Dashboard
               </Link>
-              <Link
-                href="/dashboard/loads"
-                className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                My Loads
-              </Link>
+              
+              {/* Role-specific mobile navigation */}
+              {user?.role === 'shipper' && (
+                <>
+                  <Link
+                    href="/dashboard/shipper/loads"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    My Loads
+                  </Link>
+                  <Link
+                    href="/dashboard/shipper/post-load"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Post Load
+                  </Link>
+                </>
+              )}
+              
+              {user?.role === 'carrier' && (
+                <>
+                  <Link
+                    href="/dashboard/carrier/loads"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Available Loads
+                  </Link>
+                  <Link
+                    href="/dashboard/carrier/assigned"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    My Loads
+                  </Link>
+                </>
+              )}
+              
+              {user?.role === 'admin' && (
+                <>
+                  <Link
+                    href="/dashboard/admin/users"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Manage Users
+                  </Link>
+                  <Link
+                    href="/dashboard/admin/loads"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    All Loads
+                  </Link>
+                  <Link
+                    href="/dashboard/admin/reports"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Reports
+                  </Link>
+                </>
+              )}
+              
               <Link
                 href="/dashboard/profile"
                 className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
