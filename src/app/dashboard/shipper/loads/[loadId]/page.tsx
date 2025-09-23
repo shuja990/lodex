@@ -10,6 +10,7 @@ import { MapboxMap } from '@/components/mapbox';
 import { Load } from '@/types/load';
 import { IOffer } from '@/types/offer';
 import { useAuthStore, fetchWithAuth } from '@/store/auth';
+import { useToast } from '@/components/ui/use-toast';
 import { 
   MapPin, 
   Truck, 
@@ -24,6 +25,7 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
+import { formatLoadStatus } from '@/lib/utils';
 
 interface LoadWithOffers extends Load {
   offers?: IOffer[];
@@ -37,6 +39,7 @@ export default function LoadDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [processingOffer, setProcessingOffer] = useState<string | null>(null);
   const { isAuthenticated } = useAuthStore();
+  const { toast } = useToast();
 
   // Load data on component mount
   const fetchLoadData = useCallback(async () => {
@@ -96,13 +99,25 @@ export default function LoadDetailsPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to ${action} offer`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Failed to ${action} offer`);
       }
+
+      const result = await response.json();
+      
+      toast({
+        title: "Success!",
+        description: result.message || `Offer ${action} successfully.`,
+      });
 
       // Refresh data
       await fetchLoadData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action} offer`);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : `Failed to ${action} offer`,
+        variant: "destructive",
+      });
     } finally {
       setProcessingOffer(null);
     }
@@ -151,7 +166,8 @@ export default function LoadDetailsPage() {
     switch (status) {
       case 'posted': return 'bg-blue-100 text-blue-800';
       case 'assigned': return 'bg-green-100 text-green-800';
-      case 'in_transit': return 'bg-yellow-100 text-yellow-800';
+  case 'in_transit': return 'bg-yellow-100 text-yellow-800';
+  case 'delivered_pending': return 'bg-orange-100 text-orange-800';
       case 'delivered': return 'bg-purple-100 text-purple-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -185,9 +201,41 @@ export default function LoadDetailsPage() {
                   Load Information
                 </CardTitle>
                 <Badge className={getStatusBadgeColor(load.status)}>
-                  {load.status.toUpperCase()}
+                  {formatLoadStatus(load.status)}
                 </Badge>
               </div>
+              {load.status === 'delivered_pending' && (
+                <div className="mt-4 flex gap-3">
+                  <Button
+                    size="sm"
+                    className="bg-green-600 hover:bg-green-700"
+                    onClick={async () => {
+                      try {
+                        const res = await fetchWithAuth(`/api/loads/${load._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'delivered' }) });
+                        if (!res.ok) throw new Error('Failed to approve delivery');
+                        toast({ title: 'Delivery Approved', description: 'Load marked as delivered.' });
+                        fetchLoadData();
+                      } catch (e) {
+                        toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to approve', variant: 'destructive' });
+                      }
+                    }}
+                  >Approve Delivery</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      try {
+                        const res = await fetchWithAuth(`/api/loads/${load._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_transit' }) });
+                        if (!res.ok) throw new Error('Failed to reject delivery');
+                        toast({ title: 'Delivery Rejected', description: 'Returned to In Transit.' });
+                        fetchLoadData();
+                      } catch (e) {
+                        toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to reject', variant: 'destructive' });
+                      }
+                    }}
+                  >Reject Delivery</Button>
+                </div>
+              )}
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -344,25 +392,25 @@ export default function LoadDetailsPage() {
                         <div className="flex items-center gap-2">
                           <User className="h-4 w-4 text-gray-500" />
                           <span className="font-medium">
-                            {offer.carrierId.companyName || `${offer.carrierId.firstName} ${offer.carrierId.lastName}`}
+                            {offer.carrierId?.companyName || `${offer.carrierId?.firstName || "Unknown"} ${offer.carrierId?.lastName || "Carrier"}`}
                           </span>
                         </div>
                         
-                        {offer.carrierId.mcNumber && (
+                        {offer.carrierId?.mcNumber && (
                           <div className="flex items-center gap-2">
                             <Truck className="h-4 w-4 text-gray-500" />
-                            <span className="text-sm text-gray-600">MC: {offer.carrierId.mcNumber}</span>
+                            <span className="text-sm text-gray-600">MC: {offer.carrierId?.mcNumber}</span>
                           </div>
                         )}
                         
                         <div className="flex items-center gap-2">
                           <Phone className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">{offer.carrierId.phone}</span>
+                          <span className="text-sm text-gray-600">{offer.carrierId?.phone || "No phone available"}</span>
                         </div>
                         
                         <div className="flex items-center gap-2">
                           <Mail className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">{offer.carrierId.email}</span>
+                          <span className="text-sm text-gray-600">{offer.carrierId?.email || "No email available"}</span>
                         </div>
                       </div>
 

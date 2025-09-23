@@ -60,6 +60,9 @@ export function DashboardNavigation() {
                 <Link href="/dashboard/carrier/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
                   Available Loads
                 </Link>
+                <Link href="/dashboard/carrier/offers" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+                  My Offers
+                </Link>
                 <Link href="/dashboard/carrier/assigned" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
                   My Loads
                 </Link>
@@ -181,6 +184,13 @@ export function DashboardNavigation() {
                     onClick={() => setIsOpen(false)}
                   >
                     Available Loads
+                  </Link>
+                  <Link
+                    href="/dashboard/carrier/offers"
+                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
+                    onClick={() => setIsOpen(false)}
+                  >
+                    My Offers
                   </Link>
                   <Link
                     href="/dashboard/carrier/assigned"

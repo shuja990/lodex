@@ -48,28 +48,16 @@ export interface ILoadDocument extends Document {
   updatedAt: Date;
 }
 
-const PointSchema = new Schema({
-  type: {
-    type: String,
-    enum: ['Point'],
-    required: true
-  },
-  coordinates: {
-    type: [Number], // [longitude, latitude]
-    required: true
-  }
-}, { _id: false });
-
 const LoadLocationSchema = new Schema({
   address: { type: String, required: true },
   city: { type: String, required: true },
   state: { type: String, required: true },
   zipCode: { type: String, required: true },
-  location: {
-    type: PointSchema,
-    required: true
+  coordinates: {
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true }
   }
-}, { _id: false });
+}, { _id: false, strict: false }); // Allow additional fields for backward compatibility
 
 const LoadDetailsSchema = new Schema({
   weight: { type: Number, required: true, min: 1 },
@@ -184,7 +172,7 @@ const LoadSchema = new Schema<ILoadDocument>({
   status: {
     type: String,
     required: true,
-    enum: ['posted', 'assigned', 'in_transit', 'delivered', 'cancelled'],
+  enum: ['posted', 'assigned', 'in_transit', 'delivered_pending', 'delivered', 'cancelled'],
     default: 'posted',
     index: true
   },
@@ -217,7 +205,8 @@ const LoadSchema = new Schema<ILoadDocument>({
     }
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  // strict: false // Allow additional fields for backward compatibility
 });
 
 // Indexes for efficient queries
@@ -262,11 +251,20 @@ LoadSchema.pre('save', async function(next) {
 // Instance methods
 LoadSchema.methods.toJSON = function() {
   const load = this.toObject();
-  load._id = load._id.toString();
-  load.shipperId = load.shipperId.toString();
+  
+  // Safely convert ObjectIds to strings
+  if (load._id) {
+    load._id = load._id.toString();
+  }
+  
+  if (load.shipperId) {
+    load.shipperId = load.shipperId.toString();
+  }
+  
   if (load.carrierId) {
     load.carrierId = load.carrierId.toString();
   }
+  
   return load;
 };
 
@@ -288,32 +286,27 @@ LoadSchema.statics.findAvailable = function(filters = {}) {
 };
 
 LoadSchema.statics.findNearLocation = function(longitude: number, latitude: number, maxDistance: number = 50) {
-  // maxDistance in miles, convert to meters for MongoDB
-  const maxDistanceMeters = maxDistance * 1609.34;
+  // Simple bounding box calculation for distance filtering
+  // This is an approximation - for more precise results, you could use the haversine formula
+  const latDelta = maxDistance / 69; // roughly 69 miles per degree of latitude
+  const lonDelta = maxDistance / (69 * Math.cos(latitude * Math.PI / 180)); // adjust for longitude
   
   return this.find({
     status: 'posted',
     $or: [
       {
-        'origin.coordinates': {
-          $geoWithin: {
-            $centerSphere: [[longitude, latitude], maxDistanceMeters / 6378100]
-          }
-        }
+        'origin.coordinates.latitude': { $gte: latitude - latDelta, $lte: latitude + latDelta },
+        'origin.coordinates.longitude': { $gte: longitude - lonDelta, $lte: longitude + lonDelta }
       },
       {
-        'destination.coordinates': {
-          $geoWithin: {
-            $centerSphere: [[longitude, latitude], maxDistanceMeters / 6378100]
-          }
-        }
+        'destination.coordinates.latitude': { $gte: latitude - latDelta, $lte: latitude + latDelta },
+        'destination.coordinates.longitude': { $gte: longitude - lonDelta, $lte: longitude + lonDelta }
       }
     ]
   }).sort({ postedAt: -1 });
 };
 
-// Create 2dsphere indexes for geospatial queries
-LoadSchema.index({ 'origin.location': '2dsphere', 'destination.location': '2dsphere' });
+// Note: Coordinate indexes are already defined above in the main index section
 
 // Export the model
 export const Load = mongoose.models.Load || mongoose.model<ILoadDocument>('Load', LoadSchema);

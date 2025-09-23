@@ -87,6 +87,7 @@ export default function AssignedLoadsPage() {
     switch (status) {
       case 'assigned': return 'bg-green-100 text-green-800';
       case 'in_transit': return 'bg-yellow-100 text-yellow-800';
+      case 'delivered_pending': return 'bg-orange-100 text-orange-800';
       case 'delivered': return 'bg-purple-100 text-purple-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -98,7 +99,9 @@ export default function AssignedLoadsPage() {
       case 'assigned':
         return ['in_transit'];
       case 'in_transit':
-        return ['delivered'];
+        return ['delivered_pending'];
+      case 'delivered_pending':
+        return []; // Await shipper action
       default:
         return [];
     }
@@ -302,10 +305,11 @@ export default function AssignedLoadsPage() {
                               onClick={() => handleStatusUpdate(load._id!, status)}
                               disabled={updatingStatus === load._id}
                             >
-                              {updatingStatus === load._id ? 'Updating...' : 
-                                status === 'in_transit' ? 'Mark as In Transit' : 
-                                status === 'delivered' ? 'Mark as Delivered' : 
-                                `Mark as ${status.replace('_', ' ')}`
+                                {updatingStatus === load._id ? 'Updating...' : 
+                                  status === 'in_transit' ? 'Mark Delivered (Request Approval)' : 
+                                  status === 'delivered_pending' ? 'Awaiting Shipper Approval' :
+                                  status === 'delivered' ? 'Delivered' : 
+                                  `Mark as ${status.replace('_', ' ')}`
                               }
                             </Button>
                           ))}

@@ -166,12 +166,12 @@ export async function GET(request: NextRequest) {
       baseQuery['details.temperatureControlled'] = filters.temperatureControlled;
     }
 
-    // Apply location-based filtering for carriers
+    // Apply location-based filtering for carriers only if radius is specified
     if ((user.role === 'carrier' || user.role === 'driver') && 
-        (searchParams.get('userLat') && searchParams.get('userLng'))) {
+        (searchParams.get('userLat') && searchParams.get('userLng') && searchParams.get('radius'))) {
       const userLat = parseFloat(searchParams.get('userLat')!);
       const userLng = parseFloat(searchParams.get('userLng')!);
-      const radius = parseFloat(searchParams.get('radius') || '100'); // default 100 miles
+      const radius = parseFloat(searchParams.get('radius')!);
 
       // Find loads within radius of user's location
       const radiusInMeters = radius * 1609.34;
@@ -318,20 +318,8 @@ export async function POST(request: NextRequest) {
     // Create load
     const load = await Load.create({
       shipperId: user._id,
-      origin: {
-        ...body.origin,
-        location: {
-          type: 'Point',
-          coordinates: [body.origin.coordinates.longitude, body.origin.coordinates.latitude]
-        }
-      },
-      destination: {
-        ...body.destination,
-        location: {
-          type: 'Point',
-          coordinates: [body.destination.coordinates.longitude, body.destination.coordinates.latitude]
-        }
-      },
+      origin: body.origin,
+      destination: body.destination,
       distance: Math.round(distance),
       loadType: body.loadType,
       equipmentType: body.equipmentType,

@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { formatLoadStatus } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Load } from '@/types/load';
 import { useAuthStore, fetchWithAuth } from '@/store/auth';
+import { useToast } from '@/components/ui/use-toast';
 import { 
   MapPin, 
   Truck, 
@@ -16,18 +19,60 @@ import {
   DollarSign, 
   Package,
   Clock,
-  Plus
+  Plus,
+  Navigation,
+  Filter
 } from 'lucide-react';
+import { MapboxMap } from '@/components/mapbox';
+
+interface LoadWithDistance extends Load {
+  distanceFromCarrier?: number;
+}
 
 export default function CarrierLoadsPage() {
-  const [loads, setLoads] = useState<Load[]>([]);
+  const [loads, setLoads] = useState<LoadWithDistance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
   const [offerAmount, setOfferAmount] = useState('');
   const [offerMessage, setOfferMessage] = useState('');
   const [submittingOffer, setSubmittingOffer] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [sortBy, setSortBy] = useState<'postedAt' | 'distance' | 'rate' | 'pickupDate'>('distance');
+  const [equipmentFilter, setEquipmentFilter] = useState<string>('all');
+  const [maxDistance, setMaxDistance] = useState<string>('');
   const { isAuthenticated } = useAuthStore();
+  const { toast } = useToast();
+
+  // Get user's location
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn('Could not get user location:', error);
+        }
+      );
+    }
+  }, []);
+
+  // Calculate distance between two points
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 3959; // Earth's radius in miles
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
 
   // Fetch available loads
   const fetchLoads = useCallback(async () => {
@@ -36,20 +81,77 @@ export default function CarrierLoadsPage() {
         throw new Error('Authentication required');
       }
 
-      const response = await fetchWithAuth('/api/loads?status=posted&sortBy=postedAt&sortOrder=desc');
+      // Build query parameters
+      const params = new URLSearchParams({
+        status: 'posted',
+        sortBy,
+        sortOrder: 'desc'
+      });
+
+      if (equipmentFilter !== 'all') {
+        params.set('equipmentType', equipmentFilter);
+      }
+
+      if (maxDistance) {
+        params.set('maxDistance', maxDistance);
+      }
+
+      // Always include user location if available for distance calculation
+      if (userLocation) {
+        params.set('userLat', userLocation.lat.toString());
+        params.set('userLng', userLocation.lng.toString());
+        // Only apply radius filter if maxDistance is specified
+        if (maxDistance) {
+          params.set('radius', maxDistance);
+        }
+      }
+
+      const response = await fetchWithAuth(`/api/loads?${params}`);
 
       if (!response.ok) {
         throw new Error('Failed to fetch loads');
       }
 
       const data = await response.json();
-      setLoads(data.loads || []);
+      let fetchedLoads = data.loads || [];
+
+      // Always calculate distance from carrier if location is available
+      if (userLocation) {
+        fetchedLoads = fetchedLoads.map((load: Load) => ({
+          ...load,
+          distanceFromCarrier: calculateDistance(
+            userLocation.lat,
+            userLocation.lng,
+            load.origin.coordinates.latitude,
+            load.origin.coordinates.longitude
+          )
+        }));
+      }
+      
+      // Apply sorting based on selected criteria
+      if (sortBy === 'distance' && userLocation) {
+        fetchedLoads.sort((a: LoadWithDistance, b: LoadWithDistance) => 
+          (a.distanceFromCarrier || Infinity) - (b.distanceFromCarrier || Infinity)
+        );
+      } else if (sortBy === 'rate') {
+        fetchedLoads.sort((a: Load, b: Load) => b.rate - a.rate);
+      } else if (sortBy === 'pickupDate') {
+        fetchedLoads.sort((a: Load, b: Load) => 
+          new Date(a.pickupDate).getTime() - new Date(b.pickupDate).getTime()
+        );
+      } else if (sortBy === 'postedAt') {
+        fetchedLoads.sort((a: Load, b: Load) => 
+          new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime()
+        );
+      }
+
+      setLoads(fetchedLoads);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, sortBy, equipmentFilter, maxDistance, userLocation]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -68,6 +170,47 @@ export default function CarrierLoadsPage() {
       if (!isAuthenticated) {
         throw new Error('Authentication required');
       }
+              <div className="rounded-md overflow-hidden border">
+                <div className="h-64 w-full">
+                  {/* Simple polyline between origin and destination */}
+                  <MapboxMap
+                    height="100%"
+                    markers={[
+                      {
+                        coordinates: [
+                          selectedLoad.origin.coordinates.longitude,
+                          selectedLoad.origin.coordinates.latitude
+                        ],
+                        color: '#10B981',
+                        popup: `<strong>Pickup:</strong><br/>${selectedLoad.origin.city}, ${selectedLoad.origin.state}`
+                      },
+                      {
+                        coordinates: [
+                          selectedLoad.destination.coordinates.longitude,
+                          selectedLoad.destination.coordinates.latitude
+                        ],
+                        color: '#EF4444',
+                        popup: `<strong>Delivery:</strong><br/>${selectedLoad.destination.city}, ${selectedLoad.destination.state}`
+                      }
+                    ]}
+                    route={[[
+                      selectedLoad.origin.coordinates.longitude,
+                      selectedLoad.origin.coordinates.latitude
+                    ], [
+                      selectedLoad.destination.coordinates.longitude,
+                      selectedLoad.destination.coordinates.latitude
+                    ]]}
+                    bounds={[[
+                      Math.min(selectedLoad.origin.coordinates.longitude, selectedLoad.destination.coordinates.longitude) - 0.1,
+                      Math.min(selectedLoad.origin.coordinates.latitude, selectedLoad.destination.coordinates.latitude) - 0.1
+                    ], [
+                      Math.max(selectedLoad.origin.coordinates.longitude, selectedLoad.destination.coordinates.longitude) + 0.1,
+                      Math.max(selectedLoad.origin.coordinates.latitude, selectedLoad.destination.coordinates.latitude) + 0.1
+                    ]]}
+                    fitBounds
+                  />
+                </div>
+              </div>
 
       const response = await fetchWithAuth(`/api/loads/${selectedLoad._id}/offers`, {
         method: 'POST',
@@ -90,11 +233,17 @@ export default function CarrierLoadsPage() {
       setOfferAmount('');
       setOfferMessage('');
       
-      // Show success message (you could add a toast notification here)
-      alert('Offer submitted successfully!');
+      toast({
+        title: "Success!",
+        description: "Your offer has been submitted successfully.",
+      });
       
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to submit offer');
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to submit offer',
+        variant: "destructive",
+      });
     } finally {
       setSubmittingOffer(false);
     }
@@ -105,6 +254,7 @@ export default function CarrierLoadsPage() {
       case 'posted': return 'bg-blue-100 text-blue-800';
       case 'assigned': return 'bg-green-100 text-green-800';
       case 'in_transit': return 'bg-yellow-100 text-yellow-800';
+  case 'delivered_pending': return 'bg-orange-100 text-orange-800';
       case 'delivered': return 'bg-purple-100 text-purple-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -128,6 +278,9 @@ export default function CarrierLoadsPage() {
         <Card className="w-full max-w-md mx-auto">
           <CardContent className="p-6 text-center">
             <p className="text-red-600">{error}</p>
+            <Button onClick={fetchLoads} className="mt-4">
+              Try Again
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -141,12 +294,74 @@ export default function CarrierLoadsPage() {
         <p className="text-gray-600">Browse and make offers on available loads</p>
       </div>
 
+      {/* Filters */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Filter className="h-5 w-5" />
+            Filters & Sorting
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <Label htmlFor="sortBy">Sort By</Label>
+              <Select value={sortBy} onValueChange={(value: 'postedAt' | 'distance' | 'rate' | 'pickupDate') => setSortBy(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="distance" disabled={!userLocation}>
+                    {userLocation ? 'Distance from Me (Default)' : 'Distance from Me (Location Required)'}
+                  </SelectItem>
+                  <SelectItem value="postedAt">Recently Posted</SelectItem>
+                  <SelectItem value="rate">Highest Rate</SelectItem>
+                  <SelectItem value="pickupDate">Pickup Date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="equipmentFilter">Equipment Type</Label>
+              <Select value={equipmentFilter} onValueChange={setEquipmentFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Equipment</SelectItem>
+                  <SelectItem value="dry_van">Dry Van</SelectItem>
+                  <SelectItem value="refrigerated">Refrigerated</SelectItem>
+                  <SelectItem value="flatbed">Flatbed</SelectItem>
+                  <SelectItem value="step_deck">Step Deck</SelectItem>
+                  <SelectItem value="lowboy">Lowboy</SelectItem>
+                  <SelectItem value="box_truck">Box Truck</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="maxDistance">Max Distance (miles)</Label>
+              <Input
+                id="maxDistance"
+                type="number"
+                value={maxDistance}
+                onChange={(e) => setMaxDistance(e.target.value)}
+                placeholder="Any distance"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={fetchLoads} className="w-full">
+                Apply Filters
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {loads.length === 0 ? (
         <Card>
           <CardContent className="p-8 text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Available Loads</h3>
-            <p className="text-gray-600">There are currently no loads available for bidding.</p>
+            <p className="text-gray-600">There are currently no loads available matching your criteria.</p>
           </CardContent>
         </Card>
       ) : (
@@ -157,7 +372,7 @@ export default function CarrierLoadsPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Load #{load.loadNumber}</CardTitle>
                   <Badge className={getStatusBadgeColor(load.status)}>
-                    {load.status.toUpperCase()}
+                    {formatLoadStatus(load.status)}
                   </Badge>
                 </div>
               </CardHeader>
@@ -197,6 +412,15 @@ export default function CarrierLoadsPage() {
                     <span>${load.rate.toLocaleString()}</span>
                   </div>
                 </div>
+
+                {load.distanceFromCarrier && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Navigation className="h-4 w-4 text-blue-500" />
+                    <span className="text-blue-600 font-medium">
+                      {Math.round(load.distanceFromCarrier)} miles from you
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-gray-500" />

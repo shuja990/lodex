@@ -68,8 +68,8 @@ export async function PUT(request: NextRequest, { params }: { params: { loadId: 
     const body = await request.json();
     const { status } = body;
 
-    // Validate status
-    const validStatuses = ['assigned', 'in_transit', 'delivered', 'cancelled'];
+  // Validate status (carrier cannot directly mark final delivered, only delivered_pending first)
+  const validStatuses = ['assigned', 'in_transit', 'delivered_pending', 'delivered', 'cancelled'];
     if (!validStatuses.includes(status)) {
       return NextResponse.json({ 
         success: false, 
@@ -83,21 +83,39 @@ export async function PUT(request: NextRequest, { params }: { params: { loadId: 
       return NextResponse.json({ success: false, message: 'Load not found' }, { status: 404 });
     }
 
-    // Only assigned carriers can update load status
+    // Role-based status transition rules
     if (user.role === 'carrier') {
       if (!load.carrierId || load.carrierId.toString() !== user._id.toString()) {
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Only the assigned carrier can update load status' 
-        }, { status: 403 });
+        return NextResponse.json({ success: false, message: 'Only the assigned carrier can update load status' }, { status: 403 });
+      }
+      // Carrier cannot set final delivered directly
+      if (status === 'delivered') {
+        return NextResponse.json({ success: false, message: 'Carrier cannot finalize delivery (requires shipper approval)' }, { status: 403 });
+      }
+      // When carrier marks as delivered, we set delivered_pending instead
+      if (status === 'delivered_pending') {
+        if (load.status !== 'in_transit') {
+          return NextResponse.json({ success: false, message: 'Load must be in transit before marking delivered' }, { status: 400 });
+        }
       }
     } else if (user.role === 'shipper') {
-      // Shippers can only cancel their own loads
-      if (status !== 'cancelled' || load.shipperId.toString() !== user._id.toString()) {
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Shippers can only cancel their own loads' 
-        }, { status: 403 });
+      // Shipper can cancel posted/assigned/in_transit/delivered_pending (not after final delivered)
+      if (status === 'cancelled') {
+        if (load.shipperId.toString() !== user._id.toString()) {
+          return NextResponse.json({ success: false, message: 'Cannot cancel a load you do not own' }, { status: 403 });
+        }
+      } else if (status === 'delivered') {
+        // Shipper can approve delivered_pending -> delivered
+        if (load.status !== 'delivered_pending') {
+          return NextResponse.json({ success: false, message: 'Load must be awaiting delivery approval' }, { status: 400 });
+        }
+      } else if (status === 'in_transit') {
+        // Shipper rejecting delivered_pending moves it back
+        if (load.status !== 'delivered_pending') {
+          return NextResponse.json({ success: false, message: 'Can only revert a pending delivery back to in transit' }, { status: 400 });
+        }
+      } else {
+        return NextResponse.json({ success: false, message: 'Shippers can only approve or reject delivery or cancel the load' }, { status: 403 });
       }
     } else if (user.role !== 'admin') {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 403 });

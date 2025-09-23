@@ -51,42 +51,32 @@ export async function PUT(request: NextRequest, { params }: { params: { offerId:
       return NextResponse.json({ success: false, message: `This load is already ${load.status} and cannot be assigned.` }, { status: 400 });
     }
 
-    // Start a transaction
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    // Update the offer status
+    offer.status = status;
+    await offer.save();
 
-    try {
-      // Update the offer status
-      offer.status = status;
-      await offer.save({ session });
+    if (status === 'accepted') {
+      // Update the load status and assign the carrier using updateOne to avoid validation issues
+      await Load.updateOne(
+        { _id: load._id },
+        { 
+          $set: { 
+            status: 'assigned',
+            carrierId: offer.carrierId,
+            assignedAt: new Date(),
+            rate: offer.amount
+          }
+        }
+      );
 
-      if (status === 'accepted') {
-        // Update the load status and assign the carrier
-        load.status = 'assigned';
-        load.carrierId = offer.carrierId;
-        load.assignedAt = new Date();
-        // Optionally update the rate to the accepted offer amount
-        load.rate = offer.amount; 
-        await load.save({ session });
-
-        // Reject all other pending offers for this load
-        await Offer.updateMany(
-          { loadId: load._id, status: 'pending', _id: { $ne: offer._id } },
-          { $set: { status: 'rejected' } },
-          { session }
-        );
-      }
-
-      await session.commitTransaction();
-      session.endSession();
-
-      return NextResponse.json({ success: true, message: `Offer ${status} successfully.`, offer });
-
-    } catch (error) {
-      await session.abortTransaction();
-      session.endSession();
-      throw error; // Rethrow to be caught by the outer catch block
+      // Reject all other pending offers for this load
+      await Offer.updateMany(
+        { loadId: load._id, status: 'pending', _id: { $ne: offer._id } },
+        { $set: { status: 'rejected' } }
+      );
     }
+
+    return NextResponse.json({ success: true, message: `Offer ${status} successfully.`, offer });
 
   } catch (error: unknown) {
     console.error('Offer update error:', error);

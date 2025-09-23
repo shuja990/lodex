@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
 import { authenticateUser } from '@/lib/auth';
 import Load from '@/models/Load';
-import Offer from '@/models/Offer';
+import Offer, { serializeOffer } from '@/models/Offer';
 import mongoose from 'mongoose';
 
 // POST /api/loads/[loadId]/offers - Carrier makes an offer on a load
@@ -46,24 +46,23 @@ export async function POST(request: NextRequest, { params }: { params: { loadId:
     }
 
     // Check if an offer already exists from this carrier for this load
-    const existingOffer = await Offer.findOne({ loadId, carrierId: user._id });
+  const existingOffer = await Offer.findOne({ loadId, carrierId: user._id });
     if (existingOffer) {
       // Optionally, allow updating the offer
       existingOffer.amount = amount;
       existingOffer.message = message || existingOffer.message;
       existingOffer.status = 'pending'; // Reset status if it was rejected before
-      await existingOffer.save();
-      return NextResponse.json({ success: true, message: 'Offer updated successfully', offer: existingOffer }, { status: 200 });
+  await existingOffer.save();
+  return NextResponse.json({ success: true, message: 'Offer updated successfully', offer: serializeOffer(existingOffer) }, { status: 200 });
     }
 
-    const offer = await Offer.create({
+    const offerDoc = await Offer.create({
       loadId,
       carrierId: user._id,
       amount,
       message,
     });
-
-    return NextResponse.json({ success: true, message: 'Offer submitted successfully', offer }, { status: 201 });
+    return NextResponse.json({ success: true, message: 'Offer submitted successfully', offer: serializeOffer(offerDoc) }, { status: 201 });
 
   } catch (error: unknown) {
     if (error instanceof Error && error.name === 'MongoServerError' && (error as { code: number }).code === 11000) {
@@ -101,10 +100,12 @@ export async function GET(request: NextRequest, { params }: { params: { loadId: 
     }
 
     const offers = await Offer.find({ loadId })
-      .populate('carrierId', 'companyName firstName lastName email phone mcNumber')
-      .sort({ createdAt: -1 });
+      .populate('carrierId', 'company companyName firstName lastName email phone mcNumber')
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return NextResponse.json({ success: true, offers });
+    const serialized = offers.map(o => serializeOffer(o));
+    return NextResponse.json({ success: true, offers: serialized });
 
   } catch (error: unknown) {
     console.error('Error fetching offers:', error);

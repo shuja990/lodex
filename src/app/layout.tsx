@@ -4,6 +4,7 @@ import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { NavigationWrapper } from "@/components/navigation-wrapper"
+import { Toaster } from "@/components/ui/toaster"
 import { Suspense } from "react"
 import "./globals.css"
 
@@ -26,6 +27,7 @@ export default function RootLayout({
           <NavigationWrapper />
           {children}
         </Suspense>
+        <Toaster />
         <Analytics />
       </body>
     </html>

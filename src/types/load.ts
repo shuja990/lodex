@@ -1,4 +1,4 @@
-export type LoadStatus = 'posted' | 'assigned' | 'in_transit' | 'delivered' | 'cancelled';
+export type LoadStatus = 'posted' | 'assigned' | 'in_transit' | 'delivered_pending' | 'delivered' | 'cancelled';
 export type LoadType = 'Full Truckload' | 'Less Than Truckload' | 'Partial Load' | 'Expedited' | 'Temperature Controlled';
 export type EquipmentType = 'Dry Van' | 'Flatbed' | 'Refrigerated' | 'Box Truck' | 'Step Deck' | 'Lowboy' | 'Tanker' | 'Other';
 

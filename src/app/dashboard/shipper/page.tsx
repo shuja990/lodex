@@ -4,7 +4,8 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Package, Plus, Clock, DollarSign, Eye, MapPin } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Package, Plus, Clock, DollarSign, Eye, MapPin, LogOut } from 'lucide-react';
 
 interface DashboardStats {
   activeLoads: number;
@@ -24,7 +25,7 @@ interface DashboardStats {
 }
 
 export default function ShipperDashboard() {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -76,6 +77,14 @@ export default function ShipperDashboard() {
             Welcome back, {user.firstName} {user.lastName}
           </p>
         </div>
+        <Button 
+          variant="outline" 
+          onClick={logout}
+          className="flex items-center gap-2"
+        >
+          <LogOut className="h-4 w-4" />
+          Logout
+        </Button>
       </div>
 
       {/* Statistics Cards */}
