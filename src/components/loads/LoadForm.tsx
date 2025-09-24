@@ -687,30 +687,6 @@ export default function LoadForm({
                           <p className="text-sm">{watchedDestination.address}</p>
                         </div>
                       </div>
-                      {mode === 'create' && (
-                        <div className="mt-4 text-center">
-                          <Button 
-                            type="button" 
-                            onClick={async () => {
-                              console.log('Quick create button clicked');
-                              const currentFormData = watch();
-                              console.log('Current form data:', currentFormData);
-                              if (!currentFormData.origin || !currentFormData.destination) {
-                                alert('Please select both pickup and delivery locations first');
-                                return;
-                              }
-                              await handleFormSubmit(currentFormData);
-                            }}
-                            disabled={isSubmitting}
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {isSubmitting ? 'Creating...' : 'Quick Create Load'}
-                          </Button>
-                          <p className="text-xs text-gray-500 mt-2">
-                            Creates load with default values. You can edit details later.
-                          </p>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
@@ -947,72 +923,6 @@ export default function LoadForm({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                     </svg>
                     Back: Locations
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      const currentValues = getValues();
-                      console.log('=== FORM DEBUG ===');
-                      console.log('All form values:', currentValues);
-                      console.log('Weight specifically:', currentValues.weight);
-                      console.log('LoadType specifically:', currentValues.loadType);
-                      console.log('EquipmentType specifically:', currentValues.equipmentType);
-                      console.log('Description specifically:', currentValues.description);
-                      console.log('Rate specifically:', currentValues.rate);
-                      console.log('Watched weight:', watchedWeight);
-                      console.log('Watched loadType:', watchedLoadType);
-                      console.log('Form errors:', errors);
-                      console.log('Validation result:', isTabValid('details'));
-                      
-                      // Check localStorage
-                      const saved = localStorage.getItem('loadFormData');
-                      console.log('Saved data:', saved ? JSON.parse(saved) : 'none');
-                      
-                      alert(`Weight: "${currentValues.weight}"\nLoadType: "${currentValues.loadType}"\nDescription: "${currentValues.description}"\nRate: "${currentValues.rate}"\nValid: ${isTabValid('details')}`);
-                    }}
-                    className="text-xs"
-                  >
-                    Debug
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      console.log('Setting test values...');
-                      setValue('weight', '5000', { shouldValidate: true, shouldDirty: true });
-                      setValue('loadType', 'Full Truckload', { shouldValidate: true, shouldDirty: true });
-                      setValue('description', 'General cargo', { shouldValidate: true, shouldDirty: true });
-                      setValue('rate', '1000', { shouldValidate: true, shouldDirty: true });
-                      setTimeout(() => {
-                        const values = getValues();
-                        console.log('Values after manual set:', values);
-                        alert(`After manual set:\nWeight: ${values.weight}\nLoadType: ${values.loadType}\nDescription: ${values.description}\nRate: ${values.rate}`);
-                      }, 100);
-                    }}
-                    className="text-xs"
-                  >
-                    Test Set
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      console.log('Resetting to defaults...');
-                      setValue('weight', '1000');
-                      setValue('loadType', 'Full Truckload');
-                      setValue('description', 'General cargo');
-                      setValue('rate', '1000');
-                      setValue('equipmentType', 'Dry Van');
-                      localStorage.removeItem('loadFormData');
-                      alert('Form reset to defaults and localStorage cleared');
-                    }}
-                    className="text-xs"
-                  >
-                    Reset
                   </Button>
                   
                   <Button
