@@ -92,7 +92,17 @@ export function serializeOffer(doc: IOfferDocument | RawOfferShape | null | unde
       distance: l.distance,
       rate: l.rate,
       pickupDate: l.pickupDate,
-      status: l.status
+      status: l.status,
+      weight: l.details ? (l.details as Record<string, unknown>).weight : undefined,
+      description: l.details ? (l.details as Record<string, unknown>).description : undefined,
+      // Include shipper information if populated
+      shipperId: l.shipperId && typeof l.shipperId === 'object' && (l.shipperId as Record<string, unknown>)._id ? {
+        _id: ((l.shipperId as Record<string, unknown>)._id as PrimitiveId)?.toString?.() || String((l.shipperId as Record<string, unknown>)._id),
+        firstName: (l.shipperId as Record<string, unknown>).firstName,
+        lastName: (l.shipperId as Record<string, unknown>).lastName,
+        company: (l.shipperId as Record<string, unknown>).company,
+        email: (l.shipperId as Record<string, unknown>).email
+      } : l.shipperId?.toString?.() || String(l.shipperId)
     };
   } else if (raw.loadId) {
     result.loadId = raw.loadId?.toString?.() || String(raw.loadId);

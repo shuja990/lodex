@@ -1,13 +1,18 @@
-import { connectToDatabase } from '@/lib/mongodb';
-import User from '@/models/User';
+// Using relative imports so this file can be executed directly with ts-node without path alias resolution
+async function loadDeps() {
+  const { connectToDatabase } = await import('../lib/mongodb');
+  const userModule: { default: typeof import('../models/User').default } = await import('../models/User');
+  const User = userModule.default;
+  return { connectToDatabase, User };
+}
 
 export async function createAdminUser(): Promise<void> {
   try {
-    // Connect to database
+    const { connectToDatabase, User } = await loadDeps();
     await connectToDatabase();
     
     // Check if admin already exists
-    const existingAdmin = await User.findOne({ email: 'admin@lodex.com' });
+  const existingAdmin = await User.findOne({ email: 'admin@lodex.com' });
     if (existingAdmin) {
       console.log('Admin user already exists');
       return;
@@ -35,14 +40,13 @@ export async function createAdminUser(): Promise<void> {
 }
 
 // Run seeder if this file is executed directly
-if (require.main === module) {
+if (typeof require !== 'undefined' && require.main === module) {
   createAdminUser()
     .then(() => {
       console.log('Seeder completed');
-      process.exit(0);
     })
-    .catch((error) => {
-      console.error('Seeder failed:', error);
-      process.exit(1);
+    .catch(() => {
+      // error already logged
+      process.exitCode = 1;
     });
 }

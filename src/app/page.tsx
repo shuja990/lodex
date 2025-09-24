@@ -14,11 +14,25 @@ export default function HomePage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8">
               <div className="space-y-4">
+                {/* Large Logo Display */}
+                <div className="flex items-center space-x-4 mb-6">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white border-2 border-primary/20 p-2 shadow-lg">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src="/lodex-logo.jpg" 
+                      alt="LodEx Logo" 
+                      className="h-full w-full object-contain rounded"
+                      style={{ maxWidth: '100%', height: 'auto' }}
+                    />
+                  </div>
+                  <div className="text-3xl lg:text-4xl font-bold text-primary">LodEx™</div>
+                </div>
+                
                 <Badge variant="secondary" className="w-fit">
                   Fast, Reliable Micro-Load Shipping
                 </Badge>
                 <h1 className="text-4xl lg:text-6xl font-bold text-balance leading-tight">
-                  LodEx™: Connect. Ship. Track.
+                  Connect. Ship. Track.
                 </h1>
                 <p className="text-xl text-muted-foreground text-pretty leading-relaxed">
                   Connect with verified carriers, post micro-loads instantly, and track every delivery from start to
@@ -243,11 +257,17 @@ export default function HomePage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-4 gap-8">
             <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                  <Truck className="h-5 w-5 text-primary-foreground" />
+              <div className="flex items-center space-x-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white border-2 border-primary/20 p-1 shadow-sm">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src="/lodex-logo.jpg" 
+                    alt="LodEx Logo" 
+                    className="h-full w-full object-contain rounded"
+                    style={{ maxWidth: '100%', height: 'auto' }}
+                  />
                 </div>
-                <span className="text-xl font-bold">LodEx™</span>
+                <span className="text-2xl font-bold">LodEx™</span>
               </div>
               <p className="text-muted-foreground text-pretty">
                 Fast, reliable micro-load shipping for modern logistics.

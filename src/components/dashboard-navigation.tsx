@@ -1,271 +1,127 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Menu, X, Truck, User, LogOut } from "lucide-react"
+import { User, LogOut } from "lucide-react"
+import { ResponsiveSidebar } from '@/components/responsive-sidebar'
 import { useAuthStore } from "@/store/auth"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 export function DashboardNavigation() {
-  const [isOpen, setIsOpen] = useState(false)
   const { user, logout } = useAuthStore()
-
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  
   const handleLogout = () => {
     logout()
+    setDropdownOpen(false)
   }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [dropdownOpen])
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
-          <Link href="/dashboard" className="flex items-center space-x-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Truck className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold text-foreground">LodEx™ Dashboard</span>
-          </Link>
-
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Back to Home
+          <div className="flex items-center space-x-4">
+            <ResponsiveSidebar variant="dashboard" />
+            <Link href="/dashboard" className="flex items-center space-x-3">
+              <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-white border-2 border-primary/20 p-1 shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src="/lodex-logo.jpg" 
+                  alt="LodEx Logo" 
+                  className="h-full w-full object-contain rounded"
+                  style={{ maxWidth: '100%', height: 'auto' }}
+                />
+              </div>
+              <span className="text-2xl font-bold text-foreground">LodEx™ Dashboard</span>
             </Link>
-            <Link href={user?.role === 'shipper' ? "/dashboard/shipper" : "/dashboard/carrier"} className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Dashboard
-            </Link>
-            
-            {/* Role-specific navigation */}
+          </div>
+          <nav className="hidden lg:flex items-center space-x-8">
+            <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Back to Home</Link>
             {user?.role === 'shipper' && (
               <>
-                <Link href="/dashboard/shipper/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  My Loads
-                </Link>
-                <Link href="/dashboard/shipper/post-load" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  Post Load
-                </Link>
+                <Link href="/dashboard/shipper" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Dashboard</Link>
+                <Link href="/dashboard/shipper/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">My Loads</Link>
+                <Link href="/dashboard/shipper/post-load" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Post Load</Link>
               </>
             )}
-            
-            {user?.role === 'carrier' && (
+            {(user?.role === 'carrier' || user?.role === 'driver') && (
               <>
-                <Link href="/dashboard/carrier/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  Available Loads
-                </Link>
-                <Link href="/dashboard/carrier/offers" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  My Offers
-                </Link>
-                <Link href="/dashboard/carrier/assigned" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  My Loads
-                </Link>
+                <Link href="/dashboard/carrier" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Dashboard</Link>
+                <Link href="/dashboard/carrier/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Available Loads</Link>
+                <Link href="/dashboard/carrier/offers" className="text-sm font-medium text-foreground hover:text-primary transition-colors">My Offers</Link>
+                <Link href="/dashboard/carrier/assigned" className="text-sm font-medium text-foreground hover:text-primary transition-colors">My Loads</Link>
               </>
             )}
-            
             {user?.role === 'admin' && (
               <>
-                <Link href="/dashboard/admin/users" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  Manage Users
-                </Link>
-                <Link href="/dashboard/admin/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  All Loads
-                </Link>
-                <Link href="/dashboard/admin/reports" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-                  Reports
-                </Link>
+                <Link href="/dashboard/admin" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Admin Home</Link>
+                <Link href="/dashboard/admin/users" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Manage Users</Link>
+                <Link href="/dashboard/admin/loads" className="text-sm font-medium text-foreground hover:text-primary transition-colors">All Loads</Link>
+                <Link href="/dashboard/admin/offers" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Offers</Link>
               </>
             )}
-            
-            <Link href="/dashboard/profile" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Profile
-            </Link>
-            <Link href="/dashboard/settings" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Settings
-            </Link>
+            <Link href="/dashboard/profile" className="text-sm font-medium text-foreground hover:text-primary transition-colors">Profile</Link>
           </nav>
-
-          {/* User Profile Dropdown */}
-          <div className="hidden md:flex items-center space-x-4">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <User className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">
-                      {user?.firstName} {user?.lastName}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {user?.email}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground capitalize">
-                      {user?.role}
-                    </p>
+          <div className="hidden lg:flex items-center space-x-4 relative" ref={dropdownRef}>
+            <div className="relative">
+              <Button 
+                variant="ghost" 
+                className="relative h-8 w-8 rounded-full hover:bg-gray-100 focus:ring-2 focus:ring-blue-500"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+              >
+                <User className="h-4 w-4" />
+              </Button>
+              
+              {dropdownOpen && (
+                <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-lg rounded-md z-[100] py-1">
+                  <div className="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex flex-col space-y-1">
+                      <p className="text-sm font-medium leading-none">{user?.firstName} {user?.lastName}</p>
+                      <p className="text-xs leading-none text-gray-500 dark:text-gray-400">{user?.email}</p>
+                      <p className="text-xs leading-none text-gray-500 dark:text-gray-400 capitalize">{user?.role}</p>
+                    </div>
                   </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/profile">Profile</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/dashboard/settings">Settings</Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Log out</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <Button variant="ghost" size="sm" onClick={() => setIsOpen(!isOpen)} aria-label="Toggle menu">
-              {isOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
-          </div>
-        </div>
-
-        {/* Mobile Navigation */}
-        {isOpen && (
-          <div className="md:hidden">
-            <div className="px-2 pt-2 pb-3 space-y-1 border-t">
-              <Link
-                href="/"
-                className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                Back to Home
-              </Link>
-              <Link
-                href="/dashboard"
-                className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                Dashboard
-              </Link>
-              
-              {/* Role-specific mobile navigation */}
-              {user?.role === 'shipper' && (
-                <>
-                  <Link
-                    href="/dashboard/shipper/loads"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
+                  
+                  <Link 
+                    href="/dashboard/profile" 
+                    className="block px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    onClick={() => setDropdownOpen(false)}
                   >
-                    My Loads
+                    Profile
                   </Link>
-                  <Link
-                    href="/dashboard/shipper/post-load"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    Post Load
-                  </Link>
-                </>
-              )}
-              
-              {user?.role === 'carrier' && (
-                <>
-                  <Link
-                    href="/dashboard/carrier/loads"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    Available Loads
-                  </Link>
-                  <Link
-                    href="/dashboard/carrier/offers"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    My Offers
-                  </Link>
-                  <Link
-                    href="/dashboard/carrier/assigned"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    My Loads
-                  </Link>
-                </>
-              )}
-              
-              {user?.role === 'admin' && (
-                <>
-                  <Link
-                    href="/dashboard/admin/users"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    Manage Users
-                  </Link>
-                  <Link
-                    href="/dashboard/admin/loads"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    All Loads
-                  </Link>
-                  <Link
-                    href="/dashboard/admin/reports"
-                    className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                    onClick={() => setIsOpen(false)}
-                  >
-                    Reports
-                  </Link>
-                </>
-              )}
-              
-              <Link
-                href="/dashboard/profile"
-                className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                Profile
-              </Link>
-              <Link
-                href="/dashboard/settings"
-                className="block px-3 py-2 text-base font-medium text-foreground hover:text-primary hover:bg-muted rounded-md transition-colors"
-                onClick={() => setIsOpen(false)}
-              >
-                Settings
-              </Link>
-              <div className="border-t pt-3 mt-3">
-                <div className="px-3 py-2">
-                  <p className="text-sm font-medium text-foreground">
-                    {user?.firstName} {user?.lastName}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {user?.email}
-                  </p>
-                  <p className="text-xs text-muted-foreground capitalize">
-                    {user?.role}
-                  </p>
+                  
+                  <div className="border-t border-gray-200 dark:border-gray-700 mt-1 pt-1">
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Log out</span>
+                    </button>
+                  </div>
                 </div>
-                <Button
-                  variant="outline"
-                  className="w-full bg-transparent mt-2 mx-3"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
-                </Button>
-              </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
       </div>
     </header>
   )

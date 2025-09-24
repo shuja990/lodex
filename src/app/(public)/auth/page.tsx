@@ -260,11 +260,17 @@ function AuthContent() {
           </Link>
 
           <div className="text-center space-y-2">
-            <div className="flex items-center justify-center space-x-2 mb-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-                <Truck className="h-6 w-6 text-primary-foreground" />
+            <div className="flex items-center justify-center space-x-3 mb-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-lg bg-white border-2 border-primary/20 p-1 shadow-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src="/lodex-logo.jpg" 
+                  alt="LodEx Logo" 
+                  className="h-full w-full object-contain rounded"
+                  style={{ maxWidth: '100%', height: 'auto' }}
+                />
               </div>
-              <span className="text-2xl font-bold">LodEx™</span>
+              <span className="text-3xl font-bold">LodEx™</span>
             </div>
             <h1 className="text-2xl font-bold text-balance">{isLogin ? "Welcome back" : "Get started"}</h1>
             <p className="text-muted-foreground">
