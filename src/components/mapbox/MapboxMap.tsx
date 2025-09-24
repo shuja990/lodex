@@ -51,6 +51,8 @@ export default function MapboxMap({
   const map = useRef<mapboxgl.Map | null>(null);
   // Track marker instances so we can remove them reliably between renders
   const markerInstancesRef = useRef<mapboxgl.Marker[]>([]);
+  const prevMarkersSignatureRef = useRef<string>('');
+  const prevRouteSignatureRef = useRef<string>('');
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +131,13 @@ export default function MapboxMap({
       
       try {
         console.log('Adding markers:', markers);
+        // Skip if markers unchanged (by coordinates & count)
+        const signature = JSON.stringify(markers.map(m => m.coordinates));
+        if (signature === prevMarkersSignatureRef.current) {
+          console.log('Markers unchanged; skipping update');
+          return;
+        }
+        prevMarkersSignatureRef.current = signature;
         
         // Remove existing markers using Mapbox API for reliability
         if (markerInstancesRef.current.length) {
@@ -198,6 +207,12 @@ export default function MapboxMap({
       
       try {
         console.log('Updating route:', route);
+        const signature = JSON.stringify(route);
+        if (signature === prevRouteSignatureRef.current) {
+          console.log('Route unchanged; skipping update');
+          return;
+        }
+        prevRouteSignatureRef.current = signature;
         
         // Remove existing route
         if (map.current!.getSource('route')) {

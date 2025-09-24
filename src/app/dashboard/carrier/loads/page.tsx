@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { formatLoadStatus } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +43,73 @@ export default function CarrierLoadsPage() {
   const [maxDistance, setMaxDistance] = useState<string>('');
   const { isAuthenticated } = useAuthStore();
   const { toast } = useToast();
+
+  // Stable memoized route elements for the currently selected load (prevents map redraw while typing)
+  const markersMemo = useMemo(() => {
+    if (!selectedLoad) return [] as { coordinates: [number, number]; color: string; popup: string }[];
+    return [
+      {
+        coordinates: [
+          selectedLoad.origin.coordinates.longitude,
+          selectedLoad.origin.coordinates.latitude
+        ] as [number, number],
+        color: '#10B981',
+        popup: `<strong>Pickup:</strong><br/>${selectedLoad.origin.city}, ${selectedLoad.origin.state}`
+      },
+      {
+        coordinates: [
+          selectedLoad.destination.coordinates.longitude,
+          selectedLoad.destination.coordinates.latitude
+        ] as [number, number],
+        color: '#EF4444',
+        popup: `<strong>Delivery:</strong><br/>${selectedLoad.destination.city}, ${selectedLoad.destination.state}`
+      }
+    ];
+  }, [selectedLoad]);
+
+  const routeMemo = useMemo(() => {
+    if (!selectedLoad) return [] as [number, number][];
+    return [
+      [selectedLoad.origin.coordinates.longitude, selectedLoad.origin.coordinates.latitude],
+      [selectedLoad.destination.coordinates.longitude, selectedLoad.destination.coordinates.latitude]
+    ] as [number, number][];
+  }, [selectedLoad]);
+
+  const boundsMemo = useMemo(() => {
+    if (!selectedLoad) return undefined;
+    return [
+      [
+        Math.min(selectedLoad.origin.coordinates.longitude, selectedLoad.destination.coordinates.longitude) - 0.1,
+        Math.min(selectedLoad.origin.coordinates.latitude, selectedLoad.destination.coordinates.latitude) - 0.1
+      ],
+      [
+        Math.max(selectedLoad.origin.coordinates.longitude, selectedLoad.destination.coordinates.longitude) + 0.1,
+        Math.max(selectedLoad.origin.coordinates.latitude, selectedLoad.destination.coordinates.latitude) + 0.1
+      ]
+    ] as [[number, number],[number, number]];
+  }, [selectedLoad]);
+
+  // Child component to isolate map from parent re-renders while typing
+  const OfferRouteMap = React.useMemo(() => {
+    if (!selectedLoad) return null;
+    const markers = markersMemo;
+    const route = routeMemo;
+    const bounds = boundsMemo;
+    return (
+      <div className="rounded-md overflow-hidden border">
+        <div className="h-64 w-full">
+          <MapboxMap
+            height="100%"
+            markers={markers}
+            route={route}
+            bounds={bounds}
+            fitBounds
+          />
+        </div>
+      </div>
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedLoad?._id]);
 
   // Get user's location
   useEffect(() => {
@@ -170,47 +237,6 @@ export default function CarrierLoadsPage() {
       if (!isAuthenticated) {
         throw new Error('Authentication required');
       }
-              <div className="rounded-md overflow-hidden border">
-                <div className="h-64 w-full">
-                  {/* Simple polyline between origin and destination */}
-                  <MapboxMap
-                    height="100%"
-                    markers={[
-                      {
-                        coordinates: [
-                          selectedLoad.origin.coordinates.longitude,
-                          selectedLoad.origin.coordinates.latitude
-                        ],
-                        color: '#10B981',
-                        popup: `<strong>Pickup:</strong><br/>${selectedLoad.origin.city}, ${selectedLoad.origin.state}`
-                      },
-                      {
-                        coordinates: [
-                          selectedLoad.destination.coordinates.longitude,
-                          selectedLoad.destination.coordinates.latitude
-                        ],
-                        color: '#EF4444',
-                        popup: `<strong>Delivery:</strong><br/>${selectedLoad.destination.city}, ${selectedLoad.destination.state}`
-                      }
-                    ]}
-                    route={[[
-                      selectedLoad.origin.coordinates.longitude,
-                      selectedLoad.origin.coordinates.latitude
-                    ], [
-                      selectedLoad.destination.coordinates.longitude,
-                      selectedLoad.destination.coordinates.latitude
-                    ]]}
-                    bounds={[[
-                      Math.min(selectedLoad.origin.coordinates.longitude, selectedLoad.destination.coordinates.longitude) - 0.1,
-                      Math.min(selectedLoad.origin.coordinates.latitude, selectedLoad.destination.coordinates.latitude) - 0.1
-                    ], [
-                      Math.max(selectedLoad.origin.coordinates.longitude, selectedLoad.destination.coordinates.longitude) + 0.1,
-                      Math.max(selectedLoad.origin.coordinates.latitude, selectedLoad.destination.coordinates.latitude) + 0.1
-                    ]]}
-                    fitBounds
-                  />
-                </div>
-              </div>
 
       const response = await fetchWithAuth(`/api/loads/${selectedLoad._id}/offers`, {
         method: 'POST',
@@ -460,6 +486,9 @@ export default function CarrierLoadsPage() {
                 <p className="text-sm"><strong>Posted Rate:</strong> ${selectedLoad.rate.toLocaleString()}</p>
                 <p className="text-sm"><strong>Equipment:</strong> {selectedLoad.equipmentType}</p>
               </div>
+
+              {/* Route Map (stable arrays so typing price doesn't trigger map changes) */}
+              {OfferRouteMap}
 
               <div className="space-y-2">
                 <Label htmlFor="offerAmount">Your Offer Amount ($) *</Label>

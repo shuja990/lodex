@@ -26,6 +26,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { formatLoadStatus } from '@/lib/utils';
+import LoadChat from '@/components/chat/load-chat';
 
 interface LoadWithOffers extends Load {
   offers?: IOffer[];
@@ -190,7 +191,7 @@ export default function LoadDetailsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Load Information */}
+  {/* Main Load Information */}
         <div className="lg:col-span-2 space-y-6">
           {/* Status and Basic Info */}
           <Card>
@@ -353,6 +354,11 @@ export default function LoadDetailsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Chat Section (visible when carrier assigned and not final delivered) */}
+          {load.carrierId && load.status !== 'delivered' && (
+            <LoadChat loadId={load._id!} disabled={false} />
+          )}
         </div>
 
         {/* Sidebar - Offers and Contact Info */}

@@ -6,12 +6,14 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Human readable status labels for loads
+// Updated human readable labels per latest product terminology
+// accepted in transit mark as delivered delivery accepted
 const LOAD_STATUS_LABELS: Record<string, string> = {
   posted: 'Posted',
-  assigned: 'Assigned',
+  assigned: 'Accepted',
   in_transit: 'In Transit',
-  delivered_pending: 'Awaiting Approval',
-  delivered: 'Delivered',
+  delivered_pending: 'Marked as Delivered', // Carrier marked delivered – awaiting shipper approval
+  delivered: 'Delivery Accepted',           // Shipper approved delivery
   cancelled: 'Cancelled'
 };
 

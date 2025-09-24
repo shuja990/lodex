@@ -14,8 +14,11 @@ import {
   Package,
   Clock,
   User,
-  Phone
+  Phone,
+  MessageSquare
 } from 'lucide-react';
+import dynamic from 'next/dynamic';
+const LoadChat = dynamic(() => import('@/components/chat/load-chat'), { ssr: false });
 
 export default function AssignedLoadsPage() {
   const [loads, setLoads] = useState<Load[]>([]);
@@ -105,6 +108,23 @@ export default function AssignedLoadsPage() {
       default:
         return [];
     }
+  };
+
+  // Format a timestamp with both date & time so changes are visible even within the same day
+  const formatTimestamp = (value: unknown) => {
+    if (!value) return '—';
+    const dateVal = typeof value === 'string' || value instanceof Date ? value : undefined;
+    if (!dateVal) return '—';
+    const d = new Date(dateVal);
+    // Use a short, consistent format (you can refine locale/options later if desired)
+    return d.toLocaleString(undefined, {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
   };
 
   if (loading) {
@@ -249,7 +269,7 @@ export default function AssignedLoadsPage() {
                     )}
                   </div>
 
-                  {/* Contact Information and Status Update */}
+                  {/* Contact Information, Status Update & Chat */}
                   <div className="space-y-4">
                     <div className="space-y-3">
                       <h4 className="font-medium">Contact Information</h4>
@@ -305,33 +325,53 @@ export default function AssignedLoadsPage() {
                               onClick={() => handleStatusUpdate(load._id!, status)}
                               disabled={updatingStatus === load._id}
                             >
-                                {updatingStatus === load._id ? 'Updating...' : 
-                                  status === 'in_transit' ? 'Mark Delivered (Request Approval)' : 
-                                  status === 'delivered_pending' ? 'Awaiting Shipper Approval' :
-                                  status === 'delivered' ? 'Delivered' : 
-                                  `Mark as ${status.replace('_', ' ')}`
-                              }
+                                {updatingStatus === load._id
+                                  ? 'Updating...'
+                                  : status === 'in_transit'
+                                    ? 'Mark Picked Up'
+                                    : status === 'delivered_pending'
+                                      ? 'Mark Delivered (Request Approval)'
+                                      : status === 'delivered'
+                                        ? 'Delivered'
+                                        : `Mark as ${status.replace('_', ' ')}`}
                             </Button>
                           ))}
                         </div>
                       </div>
                     )}
 
+                    {/* Chat section */}
+                    {load.status !== 'delivered' && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          <h4 className="font-medium">Chat</h4>
+                        </div>
+                        <LoadChat loadId={load._id!} />
+                      </div>
+                    )}
+
                     <div className="text-xs text-gray-500">
                       <div className="flex items-center gap-1">
                         <Clock className="h-3 w-3" />
-                        <span>Assigned: {new Date(load.assignedAt!).toLocaleDateString()}</span>
+                        <span title={load.assignedAt ? new Date(load.assignedAt).toISOString() : ''}>
+                          Assigned: {formatTimestamp(load.assignedAt)}
+                        </span>
                       </div>
                       {load.pickedUpAt && (
                         <div className="flex items-center gap-1 mt-1">
                           <Clock className="h-3 w-3" />
-                          <span>Picked up: {new Date(load.pickedUpAt).toLocaleDateString()}</span>
+                          <span title={new Date(load.pickedUpAt).toISOString()}>
+                            Picked up: {formatTimestamp(load.pickedUpAt)}
+                          </span>
                         </div>
                       )}
                       {load.deliveredAt && (
                         <div className="flex items-center gap-1 mt-1">
                           <Clock className="h-3 w-3" />
-                          <span>Delivered: {new Date(load.deliveredAt).toLocaleDateString()}</span>
+                          <span title={new Date(load.deliveredAt).toISOString()}>
+                            Delivered: {formatTimestamp(load.deliveredAt)}
+                          </span>
                         </div>
                       )}
                     </div>
