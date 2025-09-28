@@ -53,9 +53,76 @@ export default function MapboxMap({
   const markerInstancesRef = useRef<mapboxgl.Marker[]>([]);
   const prevMarkersSignatureRef = useRef<string>('');
   const prevRouteSignatureRef = useRef<string>('');
+  // Track style reloads to force marker refreshes when style changes
+  const [styleVersion, setStyleVersion] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isStyleLoaded, setIsStyleLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper to ensure markers exist; re-adds when missing or signature changed
+  const ensureMarkers = (force = false) => {
+    if (!map.current) return;
+    try {
+      const signature = JSON.stringify({
+        coords: markers.map((m) => m.coordinates),
+        v: styleVersion,
+      });
+      const needReadd =
+        force ||
+        markerInstancesRef.current.length !== markers.length ||
+        prevMarkersSignatureRef.current !== signature;
+      if (!needReadd) return;
+
+      // Remove existing
+      if (markerInstancesRef.current.length) {
+        markerInstancesRef.current.forEach((m) => {
+          try {
+            m.remove();
+          } catch {}
+        });
+        markerInstancesRef.current = [];
+      }
+
+      // Add markers
+      markers.forEach((marker) => {
+        const el = document.createElement('div');
+        el.className = 'mapbox-marker';
+        el.style.backgroundColor = marker.color || '#3B82F6';
+        el.style.width = '20px';
+        el.style.height = '20px';
+        el.style.borderRadius = '50%';
+        el.style.border = '2px solid white';
+        el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+        el.style.zIndex = '10';
+
+        const mapboxMarker = new mapboxgl.Marker({ element: el, draggable: markerDraggable })
+          .setLngLat(marker.coordinates)
+          .addTo(map.current!);
+
+        if (marker.popup) {
+          const popup = new mapboxgl.Popup({ offset: 25 }).setHTML(marker.popup);
+          mapboxMarker.setPopup(popup);
+        }
+        if (markerDraggable && onMarkerDragEnd) {
+          mapboxMarker.on('dragend', () => {
+            const lngLat = mapboxMarker.getLngLat();
+            onMarkerDragEnd({ id: marker.id, coordinates: [lngLat.lng, lngLat.lat] });
+          });
+        }
+        markerInstancesRef.current.push(mapboxMarker);
+      });
+
+      prevMarkersSignatureRef.current = signature;
+    } catch (e) {
+      console.error('ensureMarkers error:', e);
+    }
+  };
+
+  // Stable ref to use inside event handlers without re-subscribing
+  const ensureMarkersRef = useRef(ensureMarkers);
+  useEffect(() => {
+    ensureMarkersRef.current = ensureMarkers;
+  }, [ensureMarkers]);
 
   // Initialize map
   useEffect(() => {
@@ -80,7 +147,13 @@ export default function MapboxMap({
     map.current.on('style.load', () => {
       console.log('Style loaded');
       setIsStyleLoaded(true);
+      // Increment style version so markers can be refreshed after style reloads
+      setStyleVersion((v) => v + 1);
+      // Reset marker signature to ensure re-add after style changes
+      prevMarkersSignatureRef.current = '';
       setError(null); // Clear any previous errors
+      // After style load, ensure markers exist
+      ensureMarkersRef.current(true);
     });
 
     map.current.on('styledata', () => {
@@ -88,6 +161,12 @@ export default function MapboxMap({
       // This fires when the style is loaded and ready
       if (map.current?.isStyleLoaded()) {
         setIsStyleLoaded(true);
+        // Increment style version so markers can be refreshed after style data updates
+        setStyleVersion((v) => v + 1);
+        // Reset marker signature to ensure re-add after style changes
+        prevMarkersSignatureRef.current = '';
+        // Ensure markers are present
+        ensureMarkersRef.current(true);
       }
     });      map.current.on('error', (e) => {
         console.error('Mapbox error:', e.error);
@@ -111,6 +190,8 @@ export default function MapboxMap({
       if (map.current) {
         map.current.remove();
         map.current = null;
+        // Clear marker instances so they can be re-added on next mount
+        markerInstancesRef.current = [];
       }
     };
   }, [style, center, zoom, onMapLoad, onMapClick]);
@@ -132,10 +213,19 @@ export default function MapboxMap({
       try {
         console.log('Adding markers:', markers);
         // Skip if markers unchanged (by coordinates & count)
-        const signature = JSON.stringify(markers.map(m => m.coordinates));
+        // Include style version in signature to force re-adding when style reloads
+        const signature = JSON.stringify({
+          coords: markers.map(m => m.coordinates),
+          v: styleVersion,
+        });
         if (signature === prevMarkersSignatureRef.current) {
-          console.log('Markers unchanged; skipping update');
-          return;
+          // If signature is the same but instances are missing, re-add them
+          if (markerInstancesRef.current.length !== markers.length) {
+            console.log('Marker instances missing; forcing re-add');
+          } else {
+            console.log('Markers unchanged; skipping update');
+            return;
+          }
         }
         prevMarkersSignatureRef.current = signature;
         
@@ -189,101 +279,112 @@ export default function MapboxMap({
     // Only require map to be loaded for DOM markers (no style needed)
     if (!map.current || !isLoaded) return;
     addMarkers();
-  }, [markers, isLoaded, isStyleLoaded, markerDraggable, onMarkerDragEnd]);
+  }, [markers, isLoaded, isStyleLoaded, markerDraggable, onMarkerDragEnd, styleVersion]);
 
-  // Update route - with timeout fallback
+  // Update route - robustly waits for map 'idle' to ensure style is fully ready
   useEffect(() => {
-    console.log('Route effect:', { 
-      hasMap: !!map.current, 
-      isLoaded, 
-      isStyleLoaded,
-      isMapStyleLoaded: map.current?.isStyleLoaded?.(),
-      routeLength: route.length 
-    });
-    
-    // Function to add or clear route
-    const addRoute = () => {
-      if (!map.current) return;
-      
-      try {
-        console.log('Updating route:', route);
-        const signature = JSON.stringify(route);
-        if (signature === prevRouteSignatureRef.current) {
-          console.log('Route unchanged; skipping update');
-          return;
-        }
-        prevRouteSignatureRef.current = signature;
-        
-        // Remove existing route
-        if (map.current!.getSource('route')) {
-          console.log('Removing existing route');
-          map.current!.removeLayer('route');
-          map.current!.removeSource('route');
-        }
+    const m = map.current;
+    if (!m || !isLoaded) return;
 
-        // Add new route
-        if (route.length > 0) {
-          console.log('Adding new route with', route.length, 'points');
-          
-          map.current!.addSource('route', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: {
-                type: 'LineString',
-                coordinates: route
-              }
-            }
-          });
-
-          map.current!.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: {
-              'line-join': 'round',
-              'line-cap': 'round'
-            },
-            paint: {
-              'line-color': '#3B82F6',
-              'line-width': 4
-            }
-          });
-          
-          console.log('Route added successfully');
-        } else {
-          console.log('No route coordinates provided; cleared existing route if any');
-        }
-      } catch (error) {
-        console.error('Error updating route:', error);
-        setError('Failed to update route on map');
+    // Remove route if not enough points
+    if (!route || route.length < 2) {
+      if (m.getSource('route')) {
+        try {
+          m.removeLayer('route');
+          m.removeSource('route');
+        } catch {}
       }
-    };
-    
-    if (!map.current || !isLoaded) return;
-    
-    const tryAdd = () => {
-      if (map.current?.isStyleLoaded?.()) {
-        addRoute();
-        return true;
-      }
-      return false;
-    };
-
-    if (!tryAdd()) {
-      console.log('Style not ready for route yet, waiting...');
-      const onStyleLoad = () => {
-        tryAdd();
-      };
-      map.current?.once('style.load', onStyleLoad);
-      const timeout = setTimeout(() => {
-        tryAdd();
-      }, 800);
-      return () => {
-        clearTimeout(timeout);
-      };
+      prevRouteSignatureRef.current = '';
+      return;
     }
+
+    // Validate coordinates
+    const validRoute = route.filter((coord) =>
+      Array.isArray(coord) &&
+      coord.length === 2 &&
+      typeof coord[0] === 'number' &&
+      typeof coord[1] === 'number' &&
+      coord[0] !== 0 && coord[1] !== 0 &&
+      !isNaN(coord[0]) && !isNaN(coord[1])
+    );
+    if (validRoute.length < 2) return;
+
+    const signature = JSON.stringify(validRoute);
+    if (signature === prevRouteSignatureRef.current && m.getSource('route')) {
+      // Nothing to do
+      return;
+    }
+
+    let idleTimeout: ReturnType<typeof setTimeout> | undefined;
+    let removed = false;
+
+    const addRouteSafely = (): boolean => {
+      if (!map.current) return false;
+      if (!m.isStyleLoaded() || !m.loaded()) return false;
+      try {
+        // Remove existing if any (style may have reset)
+        if (m.getSource('route')) {
+          try { m.removeLayer('route'); } catch {}
+          try { m.removeSource('route'); } catch {}
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        m.addSource('route', {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: {
+              type: 'LineString',
+              coordinates: validRoute,
+            },
+          },
+        } as any);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        m.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: { 'line-join': 'round', 'line-cap': 'round' },
+          paint: { 'line-color': '#3B82F6', 'line-width': 4, 'line-opacity': 0.8 },
+        } as any);
+        // After (re)adding the route, ensure markers are present above
+        setTimeout(() => ensureMarkersRef.current(true), 0);
+        prevRouteSignatureRef.current = signature;
+        return true;
+      } catch (e) {
+        console.error('Error adding route safely:', e);
+        return false;
+      }
+    };
+
+    // Try immediately if map looks ready
+    if (m.isStyleLoaded() && m.loaded()) {
+      if (addRouteSafely()) return;
+    }
+
+    // Otherwise, wait for the truly idle state, then retry a few times
+    let retries = 0;
+    const maxRetries = 5;
+    const onIdle = () => {
+      if (removed) return;
+      if (addRouteSafely()) return;
+      if (retries < maxRetries) {
+        retries++;
+        idleTimeout = setTimeout(() => {
+          if (!removed) m.once('idle', onIdle);
+        }, 200 * retries);
+      } else {
+        console.warn('Failed to add route after retries');
+      }
+    };
+
+    m.once('idle', onIdle);
+
+    return () => {
+      removed = true;
+      try { m.off('idle', onIdle); } catch {}
+      if (idleTimeout) clearTimeout(idleTimeout);
+    };
   }, [route, isLoaded, isStyleLoaded]);
 
   // Fit bounds

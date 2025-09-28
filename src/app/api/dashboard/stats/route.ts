@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { authenticateUser } from '@/lib/auth';
 import Load from '@/models/Load';
 import Offer from '@/models/Offer';
+import User from '@/models/User';
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,12 +20,7 @@ export async function GET(request: NextRequest) {
       // Shipper-specific stats
       const [
         activeLoads,
-        pendingPickupLoads,
-        totalLoads,
-        deliveredLoads,
-        totalRevenue,
-        totalMiles,
-        recentOffers
+        pendingPickupLoads
       ] = await Promise.all([
         // Active loads (posted, assigned, in_transit)
         Load.countDocuments({ 
@@ -36,40 +32,34 @@ export async function GET(request: NextRequest) {
         Load.countDocuments({ 
           shipperId: user._id, 
           status: 'assigned' 
-        }),
-        
-        // Total loads ever created
-        Load.countDocuments({ shipperId: user._id }),
-        
-        // Delivered loads
-        Load.countDocuments({ 
-          shipperId: user._id, 
-          status: 'delivered' 
-        }),
-        
-        // Total revenue from delivered loads
-        Load.aggregate([
-          { $match: { shipperId: user._id, status: 'delivered' } },
-          { $group: { _id: null, total: { $sum: '$rate' } } }
-        ]),
-        
-        // Total miles from all loads
-        Load.aggregate([
-          { $match: { shipperId: user._id } },
-          { $group: { _id: null, total: { $sum: '$distance' } } }
-        ]),
-        
-        // Recent offers on shipper's loads
-        Offer.find()
-          .populate({
-            path: 'loadId',
-            match: { shipperId: user._id },
-            select: 'loadNumber'
-          })
-          .populate('carrierId', 'firstName lastName companyName')
-          .sort({ createdAt: -1 })
-          .limit(5)
+        })
       ]);
+
+      // Get additional data separately
+      const totalRevenue = await Load.aggregate([
+        { 
+          $match: { 
+            shipperId: user._id, 
+            status: 'delivered' 
+          } 
+        },
+        { $group: { _id: null, total: { $sum: '$rate' } } }
+      ]);
+
+      const totalMiles = await Load.aggregate([
+        { $match: { shipperId: user._id } },
+        { $group: { _id: null, total: { $sum: '$distance' } } }
+      ]);
+
+      const recentOffers = await Offer.find()
+        .populate({
+          path: 'loadId',
+          match: { shipperId: user._id },
+          select: 'loadNumber'
+        })
+        .populate('carrierId', 'firstName lastName companyName')
+        .sort({ createdAt: -1 })
+        .limit(5);
 
       // Calculate previous month stats for comparison
       const lastMonth = new Date();
@@ -101,23 +91,25 @@ export async function GET(request: NextRequest) {
 
       stats = {
         activeLoads,
-        pendingPickup: pendingPickupLoads,
+        pendingPickups: pendingPickupLoads,
         totalRevenue: currentRevenue,
         totalMiles: totalMiles[0]?.total || 0,
-        revenueGrowth: `${revenueGrowth}%`,
-        activeLoadsGrowth: `${activeLoadsGrowth}%`,
-        recentActivity: recentOffers
+        revenueGrowth: parseFloat(revenueGrowth),
+        activeLoadsGrowth: parseFloat(activeLoadsGrowth),
+        milesGrowth: 0, // Can be calculated if needed
+        recentOffers: recentOffers
           .filter(offer => offer.loadId) // Only include offers with valid loads
           .map(offer => ({
-            type: 'offer_received',
-            message: `New ${offer.status} offer from ${offer.carrierId.companyName || `${offer.carrierId.firstName} ${offer.carrierId.lastName}`}`,
+            id: offer._id.toString(),
+            carrierName: offer.carrierId.companyName || `${offer.carrierId.firstName} ${offer.carrierId.lastName}`,
+            rate: offer.amount,
             timestamp: offer.submittedAt,
-            amount: offer.amount
+            loadNumber: offer.loadId.loadNumber
           }))
       };
 
-    } else if (user.role === 'carrier') {
-      // Carrier-specific stats
+    } else if (user.role === 'carrier' || user.role === 'driver') {
+      // Carrier/Driver-specific stats
       const [
         assignedLoads,
         availableLoads,
@@ -182,11 +174,9 @@ export async function GET(request: NextRequest) {
       ] = await Promise.all([
         Load.countDocuments(),
         Load.countDocuments({ status: { $in: ['posted', 'assigned', 'in_transit'] } }),
-        // Assuming User model exists - you may need to import it
-        // User.countDocuments({ isActive: true }),
-        0, // Placeholder
-        0, // Placeholder  
-        0, // Placeholder
+        User.countDocuments({ isActive: true }),
+        User.countDocuments({ role: 'shipper', isActive: true }),
+        User.countDocuments({ role: { $in: ['carrier', 'driver'] }, isActive: true }),
         Load.aggregate([
           { $match: { status: 'delivered' } },
           { $group: { _id: null, total: { $sum: '$rate' } } }
@@ -196,9 +186,9 @@ export async function GET(request: NextRequest) {
       stats = {
         totalLoads,
         activeLoads,
-        totalUsers: 0, // Placeholder
-        totalShippers: 0, // Placeholder
-        totalCarriers: 0, // Placeholder
+        totalUsers,
+        totalShippers,
+        totalCarriers,
         totalRevenue: totalRevenue[0]?.total || 0,
         recentActivity: [] // Can be populated with recent system activity
       };

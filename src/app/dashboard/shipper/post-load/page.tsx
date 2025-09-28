@@ -40,7 +40,6 @@ export default function PostLoadPage() {
         router.push('/dashboard/shipper/loads');
       }
     } catch (error) {
-      console.error('Error creating load:', error);
       alert(error instanceof Error ? error.message : 'Failed to create load');
     } finally {
       setIsSubmitting(false);

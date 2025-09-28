@@ -223,33 +223,21 @@ function toDefaultValues(load?: Load): LoadFormData {
     .split("T")[0];
 
   return {
-    origin: load?.origin || {
-      address: "",
-      city: "",
-      state: "",
-      zipCode: "",
-      coordinates: { latitude: 0, longitude: 0 },
-    },
-    destination: load?.destination || {
-      address: "",
-      city: "",
-      state: "",
-      zipCode: "",
-      coordinates: { latitude: 0, longitude: 0 },
-    },
+    origin: load?.origin || null,
+    destination: load?.destination || null,
     loadType: load?.loadType || "Full Truckload",
     equipmentType: load?.equipmentType || "Dry Van",
-    weight: load?.details.weight ?? 1000,
-    length: load?.details.length ?? "",
-    width: load?.details.width ?? "",
-    height: load?.details.height ?? "",
-    pieces: load?.details.pieces ?? "",
-    description: load?.details.description || "General cargo",
+    weight: load?.details.weight ?? undefined,
+    length: load?.details.length ?? undefined,
+    width: load?.details.width ?? undefined,
+    height: load?.details.height ?? undefined,
+    pieces: load?.details.pieces ?? undefined,
+    description: load?.details.description || "",
     specialInstructions: load?.details.specialInstructions ?? "",
     hazmat: !!load?.details.hazmat,
     temperatureControlled: !!load?.details.temperatureControlled,
-    tempMin: load?.details.temperatureRange?.min ?? "",
-    tempMax: load?.details.temperatureRange?.max ?? "",
+    tempMin: load?.details.temperatureRange?.min ?? undefined,
+    tempMax: load?.details.temperatureRange?.max ?? undefined,
     pickupDate: load?.pickupDate
       ? new Date(load.pickupDate).toISOString().split("T")[0]
       : today,
@@ -258,14 +246,14 @@ function toDefaultValues(load?: Load): LoadFormData {
       : tomorrow,
     pickupTime: load?.pickupTime ?? "",
     deliveryTime: load?.deliveryTime ?? "",
-    rate: load?.rate ?? 1000,
-    pickupContactName: load?.contactInfo.pickup.name || "John Doe",
-    pickupContactPhone: load?.contactInfo.pickup.phone || "555-123-4567",
+    rate: load?.rate ?? undefined,
+    pickupContactName: load?.contactInfo.pickup.name || "",
+    pickupContactPhone: load?.contactInfo.pickup.phone || "",
     pickupContactEmail: load?.contactInfo.pickup.email || "",
-    deliveryContactName: load?.contactInfo.delivery.name || "Jane Smith",
-    deliveryContactPhone: load?.contactInfo.delivery.phone || "555-987-6543",
+    deliveryContactName: load?.contactInfo.delivery.name || "",
+    deliveryContactPhone: load?.contactInfo.delivery.phone || "",
     deliveryContactEmail: load?.contactInfo.delivery.email || "",
-    referenceNumber: load?.referenceNumber || ""
+    referenceNumber: load?.referenceNumber || "",
   };
 }
 
@@ -362,15 +350,23 @@ export default function LoadForm({
   const scheduleSlice = z.object({
     pickupDate: z.string().min(1, "Pickup date is required"),
     deliveryDate: z.string().min(1, "Delivery date is required"),
-    pickupTime: z.string().optional().or(z.literal("").transform(() => undefined)),
-    deliveryTime: z.string().optional().or(z.literal("").transform(() => undefined)),
+    pickupTime: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    deliveryTime: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
   });
 
   const contactsSlice = z.object({
     pickupContactName: z.string().min(1, "Pickup contact name is required"),
     pickupContactPhone: z.string().min(1, "Pickup contact phone is required"),
     deliveryContactName: z.string().min(1, "Delivery contact name is required"),
-    deliveryContactPhone: z.string().min(1, "Delivery contact phone is required"),
+    deliveryContactPhone: z
+      .string()
+      .min(1, "Delivery contact phone is required"),
   });
 
   const validateDetailsTab = () => detailsSlice.safeParse(getValues()).success;
@@ -396,8 +392,8 @@ export default function LoadForm({
 
   const tabOrder = ["locations", "details", "schedule", "contacts"] as const;
   const canProceedToTab = (target: string, current: string) => {
-    const currentIndex = tabOrder.indexOf(current as typeof tabOrder[number]);
-    const targetIndex = tabOrder.indexOf(target as typeof tabOrder[number]);
+    const currentIndex = tabOrder.indexOf(current as (typeof tabOrder)[number]);
+    const targetIndex = tabOrder.indexOf(target as (typeof tabOrder)[number]);
     if (targetIndex <= currentIndex) return true;
     return isTabValid(current);
   };
@@ -417,7 +413,9 @@ export default function LoadForm({
   };
 
   const handleNextTab = () => {
-    const currentIndex = tabOrder.indexOf(activeTab as typeof tabOrder[number]);
+    const currentIndex = tabOrder.indexOf(
+      activeTab as (typeof tabOrder)[number]
+    );
     if (currentIndex < tabOrder.length - 1 && isTabValid(activeTab)) {
       const nextTab = tabOrder[currentIndex + 1];
       markTabCompleted(activeTab);
@@ -426,7 +424,9 @@ export default function LoadForm({
   };
 
   const handlePrevTab = () => {
-    const currentIndex = tabOrder.indexOf(activeTab as typeof tabOrder[number]);
+    const currentIndex = tabOrder.indexOf(
+      activeTab as (typeof tabOrder)[number]
+    );
     if (currentIndex > 0) {
       setActiveTab(tabOrder[currentIndex - 1]);
     }
@@ -705,9 +705,9 @@ export default function LoadForm({
                     center={[-98.5795, 39.8283]}
                     zoom={4}
                     markers={[
-                      ...(watchedOrigin && 
-                          watchedOrigin.coordinates.latitude !== 0 && 
-                          watchedOrigin.coordinates.longitude !== 0
+                      ...(watchedOrigin &&
+                      watchedOrigin.coordinates.latitude !== 0 &&
+                      watchedOrigin.coordinates.longitude !== 0
                         ? ([
                             {
                               coordinates: [
@@ -719,9 +719,9 @@ export default function LoadForm({
                             },
                           ] as const)
                         : []),
-                      ...(watchedDestination && 
-                          watchedDestination.coordinates.latitude !== 0 && 
-                          watchedDestination.coordinates.longitude !== 0
+                      ...(watchedDestination &&
+                      watchedDestination.coordinates.latitude !== 0 &&
+                      watchedDestination.coordinates.longitude !== 0
                         ? ([
                             {
                               coordinates: [
@@ -737,10 +737,11 @@ export default function LoadForm({
                     route={routeCoords}
                     onMapClick={handleMapClick}
                     bounds={
-                      watchedOrigin && watchedDestination &&
-                      watchedOrigin.coordinates.latitude !== 0 && 
+                      watchedOrigin &&
+                      watchedDestination &&
+                      watchedOrigin.coordinates.latitude !== 0 &&
                       watchedOrigin.coordinates.longitude !== 0 &&
-                      watchedDestination.coordinates.latitude !== 0 && 
+                      watchedDestination.coordinates.latitude !== 0 &&
                       watchedDestination.coordinates.longitude !== 0
                         ? ([
                             [

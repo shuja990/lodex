@@ -5,7 +5,15 @@ import Link from 'next/link';
 import { useAuthStore } from '@/store/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Package, Plus, Clock, DollarSign, Eye, MapPin, LogOut } from 'lucide-react';
+import {
+  Package,
+  Plus,
+  Clock,
+  DollarSign,
+  Eye,
+  MapPin,
+  LogOut,
+} from "lucide-react";
 
 interface DashboardStats {
   activeLoads: number;
@@ -25,15 +33,16 @@ interface DashboardStats {
 }
 
 export default function ShipperDashboard() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, token } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboardStats = async () => {
       try {
-        const token = localStorage.getItem('token');
-        if (!token) throw new Error('No token found');
+        if (!token) {
+          throw new Error('No token found');
+        }
 
         const response = await fetch('/api/dashboard/stats', {
           headers: {
@@ -45,18 +54,22 @@ export default function ShipperDashboard() {
         if (!response.ok) throw new Error('Failed to fetch stats');
         
         const data = await response.json();
-        setStats(data);
+        if (data.success) {
+          setStats(data.stats);
+        } else {
+          throw new Error(data.message || 'Failed to fetch stats');
+        }
       } catch (error) {
-        console.error('Failed to fetch dashboard stats:', error);
+        // Error fetching stats
       } finally {
         setLoading(false);
       }
     };
 
-    if (user) {
+    if (user && token) {
       fetchDashboardStats();
     }
-  }, [user]);
+  }, [user, token]);
 
   if (!user) {
     return (
@@ -77,8 +90,8 @@ export default function ShipperDashboard() {
             Welcome back, {user.firstName} {user.lastName}
           </p>
         </div>
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           onClick={logout}
           className="flex items-center gap-2"
         >
@@ -106,28 +119,45 @@ export default function ShipperDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Loads</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Active Loads
+              </CardTitle>
               <Package className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.activeLoads || 0}</div>
+              <div className="text-2xl font-bold">
+                {stats?.activeLoads || 0}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {stats?.activeLoadsGrowth ? (
-                  <span className={stats.activeLoadsGrowth >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {stats.activeLoadsGrowth > 0 ? '+' : ''}{stats.activeLoadsGrowth.toFixed(1)}% from last month
+                  <span
+                    className={
+                      stats.activeLoadsGrowth >= 0
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }
+                  >
+                    {stats.activeLoadsGrowth > 0 ? "+" : ""}
+                    {stats.activeLoadsGrowth.toFixed(1)}% from last month
                   </span>
-                ) : 'No change from last month'}
+                ) : (
+                  "No change from last month"
+                )}
               </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Pickups</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Pending Pickups
+              </CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.pendingPickups || 0}</div>
+              <div className="text-2xl font-bold">
+                {stats?.pendingPickups || 0}
+              </div>
               <p className="text-xs text-muted-foreground">
                 Loads awaiting pickup
               </p>
@@ -136,17 +166,30 @@ export default function ShipperDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Monthly Revenue
+              </CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">${stats?.totalRevenue?.toLocaleString() || '0'}</div>
+              <div className="text-2xl font-bold">
+                ${stats?.totalRevenue?.toLocaleString() || "0"}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {stats?.revenueGrowth ? (
-                  <span className={stats.revenueGrowth >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {stats.revenueGrowth > 0 ? '+' : ''}{stats.revenueGrowth.toFixed(1)}% from last month
+                  <span
+                    className={
+                      stats.revenueGrowth >= 0
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }
+                  >
+                    {stats.revenueGrowth > 0 ? "+" : ""}
+                    {stats.revenueGrowth.toFixed(1)}% from last month
                   </span>
-                ) : 'No change from last month'}
+                ) : (
+                  "No change from last month"
+                )}
               </p>
             </CardContent>
           </Card>
@@ -157,13 +200,22 @@ export default function ShipperDashboard() {
               <MapPin className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats?.totalMiles?.toLocaleString() || '0'}</div>
+              <div className="text-2xl font-bold">
+                {stats?.totalMiles?.toLocaleString() || "0"}
+              </div>
               <p className="text-xs text-muted-foreground">
                 {stats?.milesGrowth ? (
-                  <span className={stats.milesGrowth >= 0 ? 'text-green-600' : 'text-red-600'}>
-                    {stats.milesGrowth > 0 ? '+' : ''}{stats.milesGrowth.toFixed(1)}% from last month
+                  <span
+                    className={
+                      stats.milesGrowth >= 0 ? "text-green-600" : "text-red-600"
+                    }
+                  >
+                    {stats.milesGrowth > 0 ? "+" : ""}
+                    {stats.milesGrowth.toFixed(1)}% from last month
                   </span>
-                ) : 'No change from last month'}
+                ) : (
+                  "No change from last month"
+                )}
               </p>
             </CardContent>
           </Card>
@@ -175,7 +227,9 @@ export default function ShipperDashboard() {
         <Card className="hover:shadow-lg transition-shadow">
           <Link href="/dashboard/shipper/post-load" className="block">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Post New Load</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Post New Load
+              </CardTitle>
               <Plus className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -190,7 +244,9 @@ export default function ShipperDashboard() {
         <Card className="hover:shadow-lg transition-shadow">
           <Link href="/dashboard/shipper/loads" className="block">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">View My Loads</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                View My Loads
+              </CardTitle>
               <Eye className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -202,33 +258,6 @@ export default function ShipperDashboard() {
           </Link>
         </Card>
       </div>
-
-      {/* Recent Offers */}
-      {stats?.recentOffers && stats.recentOffers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Offers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {stats.recentOffers.map((offer) => (
-                <div key={offer.id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div>
-                    <p className="font-medium">{offer.carrierName}</p>
-                    <p className="text-sm text-muted-foreground">Load: {offer.loadNumber}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(offer.timestamp).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-green-600">${offer.rate.toLocaleString()}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

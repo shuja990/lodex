@@ -68,8 +68,8 @@ export default function AdminDashboard() {
         setStats(data.stats);
         setLastUpdated(new Date());
       }
-    } catch (error) {
-      console.error('Failed to load stats:', error);
+    } catch {
+      // Error loading stats
     } finally {
       setLoading(false);
     }

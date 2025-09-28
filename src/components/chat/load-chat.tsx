@@ -93,10 +93,11 @@ export const LoadChat: React.FC<LoadChatProps> = ({ loadId, disabled = false, cl
         throw new Error(data.message || 'Failed to send');
       }
       const data = await res.json();
-      if (data.message) {
+      if (data.messages && data.messages.length > 0) {
         // Only add the new message sent, not all messages
-        setMessages(prev => [...prev, data.message]);
-        setSince(data.message.createdAt);
+        const newMessage = data.messages[0];
+        setMessages(prev => [...prev, newMessage]);
+        setSince(newMessage.createdAt);
         scrollToBottom();
       }
       setInput('');
@@ -134,7 +135,12 @@ export const LoadChat: React.FC<LoadChatProps> = ({ loadId, disabled = false, cl
               <div key={m._id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm shadow ${isMine ? 'bg-primary text-primary-foreground' : 'bg-white border'}`}>
                   <div className="whitespace-pre-wrap break-words">{m.message}</div>
-                  <div className="mt-1 text-[10px] opacity-70 text-right">{new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                  <div className="mt-1 text-[10px] opacity-70 text-right">
+                    {m.createdAt && !isNaN(new Date(m.createdAt).getTime()) 
+                      ? new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                      : 'Just now'
+                    }
+                  </div>
                 </div>
               </div>
             );

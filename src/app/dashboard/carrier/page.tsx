@@ -35,9 +35,13 @@ export default function CarrierDashboard() {
         if (!response.ok) throw new Error('Failed to fetch stats');
         
         const data = await response.json();
-        setStats(data);
-      } catch (error) {
-        console.error('Failed to fetch dashboard stats:', error);
+        if (data.success) {
+          setStats(data.stats);
+        } else {
+          throw new Error(data.message || 'Failed to fetch stats');
+        }
+      } catch {
+        // Error fetching stats
       } finally {
         setLoading(false);
       }

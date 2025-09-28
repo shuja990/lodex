@@ -1,12 +1,21 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { connectToDatabase } from '@/lib/mongodb';
+import { authenticateUser } from '@/lib/auth';
 import User from '@/models/User';
 import Load from '@/models/Load';
 import Offer from '@/models/Offer';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await connectToDatabase();
+    
+    const user = await authenticateUser(request);
+    if (!user || user.role !== 'admin') {
+      return NextResponse.json(
+        { success: false, message: 'Admin access required' },
+        { status: 403 }
+      );
+    }
 
     // Get user counts by role
     const [totalUsers, shippers, carriers, drivers] = await Promise.all([
@@ -19,7 +28,7 @@ export async function GET() {
     // Get load statistics
     const [totalLoads, activeLoads, completedLoads] = await Promise.all([
       Load.countDocuments(),
-      Load.countDocuments({ status: 'available' }),
+      Load.countDocuments({ status: { $in: ['posted', 'assigned', 'in_transit'] } }),
       Load.countDocuments({ status: 'delivered' }),
     ]);
 

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Load } from '@/types/load';
+import { Load, LoadStatus } from '@/types/load';
 import { useAuthStore, fetchWithAuth } from '@/store/auth';
 import { useToast } from '@/components/ui/use-toast';
 import { 
@@ -73,8 +73,19 @@ export default function AssignedLoadsPage() {
         throw new Error(errorData.message || 'Failed to update status');
       }
 
-      // Refresh the loads list
-      await fetchAssignedLoads();
+      // Update the specific load in state instead of full refetch
+      setLoads(prevLoads => 
+        prevLoads.map(load => 
+          load._id === loadId 
+            ? { 
+                ...load, 
+                status: newStatus as LoadStatus,
+                ...(newStatus === 'in_transit' && { pickedUpAt: new Date() }),
+                ...(newStatus === 'delivered_pending' && { deliveredAt: new Date() })
+              }
+            : load
+        )
+      );
       
       toast({
         title: "Success",

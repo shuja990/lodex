@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { MapboxMap } from '@/components/mapbox';
-import { Load } from '@/types/load';
+import { Load, LoadStatus } from '@/types/load';
 import { IOffer } from '@/types/offer';
 import { useAuthStore, fetchWithAuth } from '@/store/auth';
 import { useToast } from '@/components/ui/use-toast';
@@ -111,8 +111,27 @@ export default function LoadDetailsPage() {
         description: result.message || `Offer ${action} successfully.`,
       });
 
-      // Refresh data
-      await fetchLoadData();
+      // Update offers state and load state if offer was accepted
+      setOffers(prevOffers => 
+        prevOffers.map(o => 
+          o._id === offerId ? { ...o, status: action } : o
+        )
+      );
+      
+      // If offer was accepted, update load status and carrierId
+      if (action === 'accepted') {
+        const acceptedOffer = offers.find(o => o._id === offerId);
+        if (acceptedOffer) {
+          setLoad(prev => prev ? { 
+            ...prev, 
+            status: 'assigned' as LoadStatus,
+            carrierId: typeof acceptedOffer.carrierId === 'object' 
+              ? acceptedOffer.carrierId._id 
+              : acceptedOffer.carrierId,
+            assignedAt: new Date()
+          } : null);
+        }
+      }
     } catch (err) {
       toast({
         title: "Error",
@@ -215,7 +234,7 @@ export default function LoadDetailsPage() {
                         const res = await fetchWithAuth(`/api/loads/${load._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'delivered' }) });
                         if (!res.ok) throw new Error('Failed to approve delivery');
                         toast({ title: 'Delivery Approved', description: 'Load marked as delivered.' });
-                        fetchLoadData();
+                        setLoad(prev => prev ? { ...prev, status: 'delivered' as LoadStatus } : null);
                       } catch (e) {
                         toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to approve', variant: 'destructive' });
                       }
@@ -229,7 +248,7 @@ export default function LoadDetailsPage() {
                         const res = await fetchWithAuth(`/api/loads/${load._id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'in_transit' }) });
                         if (!res.ok) throw new Error('Failed to reject delivery');
                         toast({ title: 'Delivery Rejected', description: 'Returned to In Transit.' });
-                        fetchLoadData();
+                        setLoad(prev => prev ? { ...prev, status: 'in_transit' as LoadStatus } : null);
                       } catch (e) {
                         toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed to reject', variant: 'destructive' });
                       }

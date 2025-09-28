@@ -38,6 +38,7 @@ export default function CarrierLoadsPage() {
   const [routeEnd, setRouteEnd] = useState<LoadLocation | null>(null);
   const [loads, setLoads] = useState<LoadWithDistance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filtering, setFiltering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
   const [offerAmount, setOfferAmount] = useState('');
@@ -53,32 +54,58 @@ export default function CarrierLoadsPage() {
   // Stable memoized route elements for the currently selected load (prevents map redraw while typing)
   const markersMemo = useMemo(() => {
     if (!selectedLoad) return [] as { coordinates: [number, number]; color: string; popup: string }[];
-    return [
-      {
-        coordinates: [
-          selectedLoad.origin.coordinates.longitude,
-          selectedLoad.origin.coordinates.latitude
-        ] as [number, number],
+    
+    const originLng = selectedLoad.origin.coordinates.longitude;
+    const originLat = selectedLoad.origin.coordinates.latitude;
+    const destLng = selectedLoad.destination.coordinates.longitude;
+    const destLat = selectedLoad.destination.coordinates.latitude;
+    
+    const markers = [];
+    
+    // Only add origin marker if coordinates are valid
+    if (originLng && originLat && originLng !== 0 && originLat !== 0) {
+      markers.push({
+        coordinates: [originLng, originLat] as [number, number],
         color: '#10B981',
         popup: `<strong>Pickup:</strong><br/>${selectedLoad.origin.city}, ${selectedLoad.origin.state}`
-      },
-      {
-        coordinates: [
-          selectedLoad.destination.coordinates.longitude,
-          selectedLoad.destination.coordinates.latitude
-        ] as [number, number],
+      });
+    }
+    
+    // Only add destination marker if coordinates are valid
+    if (destLng && destLat && destLng !== 0 && destLat !== 0) {
+      markers.push({
+        coordinates: [destLng, destLat] as [number, number],
         color: '#EF4444',
         popup: `<strong>Delivery:</strong><br/>${selectedLoad.destination.city}, ${selectedLoad.destination.state}`
-      }
-    ];
+      });
+    }
+    
+    console.log('Markers data for offer modal:', markers);
+    return markers;
   }, [selectedLoad]);
 
   const routeMemo = useMemo(() => {
     if (!selectedLoad) return [] as [number, number][];
-    return [
-      [selectedLoad.origin.coordinates.longitude, selectedLoad.origin.coordinates.latitude],
-      [selectedLoad.destination.coordinates.longitude, selectedLoad.destination.coordinates.latitude]
+    
+    const originLng = selectedLoad.origin.coordinates.longitude;
+    const originLat = selectedLoad.origin.coordinates.latitude;
+    const destLng = selectedLoad.destination.coordinates.longitude;
+    const destLat = selectedLoad.destination.coordinates.latitude;
+    
+    // Validate coordinates
+    if (!originLng || !originLat || !destLng || !destLat ||
+        originLng === 0 || originLat === 0 || destLng === 0 || destLat === 0) {
+      console.warn('Invalid route coordinates:', { originLng, originLat, destLng, destLat });
+      return [] as [number, number][];
+    }
+    
+    const route = [
+      [originLng, originLat],
+      [destLng, destLat]
     ] as [number, number][];
+    
+    console.log('Route data for offer modal:', route);
+    return route;
   }, [selectedLoad]);
 
   const boundsMemo = useMemo(() => {
@@ -105,6 +132,7 @@ export default function CarrierLoadsPage() {
       <div className="rounded-md overflow-hidden border">
         <div className="h-64 w-full">
           <MapboxMap
+            key={`offer-map-${selectedLoad._id}`}
             height="100%"
             markers={markers}
             route={route}
@@ -148,7 +176,12 @@ export default function CarrierLoadsPage() {
   };
 
   // Fetch available loads
-  const fetchLoads = useCallback(async () => {
+  const fetchLoads = useCallback(async (isFiltering = false) => {
+    if (isFiltering) {
+      setFiltering(true);
+    } else {
+      setLoading(true);
+    }
     try {
       if (!isAuthenticated) {
         throw new Error('Authentication required');
@@ -228,7 +261,11 @@ export default function CarrierLoadsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
-      setLoading(false);
+      if (isFiltering) {
+        setFiltering(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, [isAuthenticated, sortBy, equipmentFilter, maxDistance, userLocation, routeStart, routeEnd]);
 
@@ -316,7 +353,7 @@ export default function CarrierLoadsPage() {
         <Card className="w-full max-w-md mx-auto">
           <CardContent className="p-6 text-center">
             <p className="text-red-600">{error}</p>
-            <Button onClick={fetchLoads} className="mt-4">
+            <Button onClick={() => fetchLoads(false)} className="mt-4">
               Try Again
             </Button>
           </CardContent>
@@ -363,10 +400,10 @@ export default function CarrierLoadsPage() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button onClick={fetchLoads} disabled={!routeStart || !routeEnd}>
-              Apply Route Filter
+            <Button onClick={() => fetchLoads(true)} disabled={!routeStart || !routeEnd || filtering}>
+              {filtering ? 'Applying...' : 'Apply Route Filter'}
             </Button>
-            <Button variant="outline" onClick={() => { setRouteStart(null); setRouteEnd(null); fetchLoads(); }}>
+            <Button variant="outline" onClick={() => { setRouteStart(null); setRouteEnd(null); fetchLoads(true); }} disabled={filtering}>
               Clear Route Filter
             </Button>
           </div>
@@ -427,8 +464,8 @@ export default function CarrierLoadsPage() {
               />
             </div>
             <div className="flex items-end">
-              <Button onClick={fetchLoads} className="w-full">
-                Apply Filters
+              <Button onClick={() => fetchLoads(true)} className="w-full" disabled={filtering}>
+                {filtering ? 'Applying...' : 'Apply Filters'}
               </Button>
             </div>
           </div>

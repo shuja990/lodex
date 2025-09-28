@@ -152,8 +152,7 @@ export default function AdminUsersPage() {
       } else {
         alert(data.message || 'Failed to delete user');
       }
-    } catch (error) {
-      console.error('Delete error:', error);
+    } catch {
       alert('Failed to delete user');
     }
   };
