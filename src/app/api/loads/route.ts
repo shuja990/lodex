@@ -47,6 +47,9 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 
 // GET /api/loads - List loads with filters
 export async function GET(request: NextRequest) {
+  // Get searchParams from request
+  const searchParams = request.nextUrl.searchParams;
+  // Do not set userLat/userLng by default; only use them if present for filtering below
   try {
     await connectToDatabase();
 
@@ -61,7 +64,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { searchParams } = new URL(request.url);
+  // (Removed duplicate destructure; use searchParams from request.nextUrl only)
     
     // Build query based on user role
     const baseQuery: Record<string, unknown> = {};
@@ -76,7 +79,10 @@ export async function GET(request: NextRequest) {
         baseQuery.carrierId = user._id;
       } else {
         baseQuery.status = 'posted';
-        baseQuery.pickupDate = { $gte: new Date() };
+        // Include loads from start of today, not just future times
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        baseQuery.pickupDate = { $gte: today };
       }
     } else if (user.role === 'admin') {
       // Admin sees all loads
@@ -193,6 +199,18 @@ export async function GET(request: NextRequest) {
       ];
     }
 
+    // Carrier route filter: show loads near the route line (JS-side filtering for compatibility)
+    let routeFilter = null;
+    if ((user.role === 'carrier' || user.role === 'driver') &&
+        searchParams.get('routeStartLat') && searchParams.get('routeStartLng') &&
+        searchParams.get('routeEndLat') && searchParams.get('routeEndLng')) {
+      const startLat = parseFloat(searchParams.get('routeStartLat')!);
+      const startLng = parseFloat(searchParams.get('routeStartLng')!);
+      const endLat = parseFloat(searchParams.get('routeEndLat')!);
+      const endLng = parseFloat(searchParams.get('routeEndLng')!);
+      routeFilter = { startLat, startLng, endLat, endLng };
+    }
+
     // Pagination
     const page = Math.max(1, filters.page || 1);
     const limit = Math.min(100, Math.max(1, filters.limit || 20));
@@ -202,21 +220,60 @@ export async function GET(request: NextRequest) {
     const sortOptions: Record<string, 1 | -1> = {};
     sortOptions[filters.sortBy || 'postedAt'] = filters.sortOrder === 'asc' ? 1 : -1;
 
-    // Execute query
-    const [loads, total] = await Promise.all([
-      Load.find(baseQuery)
-        .populate('shipperId', 'firstName lastName company email phone')
-        .populate('carrierId', 'firstName lastName company email phone')
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(limit),
-      Load.countDocuments(baseQuery)
-    ]);
+
+    // Execute query (fetch all, filter by route in JS if needed)
+    let allLoads = await Load.find(baseQuery)
+      .populate('shipperId', 'firstName lastName company email phone')
+      .populate('carrierId', 'firstName lastName company email phone')
+      .sort(sortOptions);
+
+    // Haversine helper
+    function haversine(lat1, lng1, lat2, lng2) {
+      const toRad = (deg) => deg * Math.PI / 180;
+      const R = 3959; // miles
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLng/2) * Math.sin(dLng/2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      return R * c;
+    }
+
+    // If route filter is set, filter loads in JS
+    if (routeFilter) {
+      allLoads = allLoads.filter(load => {
+        const o = load.origin?.coordinates;
+        const d = load.destination?.coordinates;
+        if (!o || !d) return false;
+        const distOriginToStart = haversine(o.latitude, o.longitude, routeFilter.startLat, routeFilter.startLng);
+        const distDestToEnd = haversine(d.latitude, d.longitude, routeFilter.endLat, routeFilter.endLng);
+        // Only show if origin is near route start OR destination is near route end (within 100 miles)
+        return distOriginToStart <= 100 || distDestToEnd <= 100;
+      });
+    }
+
+    // Only filter by distance if radius parameter is explicitly provided (not just userLat/userLng for sorting)
+    if (searchParams.get('userLat') && searchParams.get('userLng') && searchParams.get('radius')) {
+      const userLat = parseFloat(searchParams.get('userLat'));
+      const userLng = parseFloat(searchParams.get('userLng'));
+      const radius = parseFloat(searchParams.get('radius'));
+      allLoads = allLoads.filter(load => {
+        const o = load.origin?.coordinates;
+        if (!o) return false;
+        const dist = haversine(userLat, userLng, o.latitude, o.longitude);
+        return dist <= radius;
+      });
+    }
+
+    // Pagination after filtering
+    const total = allLoads.length;
+    const pagedLoads = allLoads.slice(skip, skip + limit);
 
     const response: LoadResponse = {
       success: true,
       message: 'Loads retrieved successfully',
-      loads,
+      loads: pagedLoads,
       pagination: {
         total,
         page,

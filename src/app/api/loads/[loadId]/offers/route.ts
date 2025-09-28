@@ -15,8 +15,8 @@ export async function POST(request: NextRequest, { params }: { params: { loadId:
       return NextResponse.json({ success: false, message: 'Authentication required' }, { status: 401 });
     }
 
-    if (user.role !== 'carrier') {
-      return NextResponse.json({ success: false, message: 'Only carriers can make offers' }, { status: 403 });
+    if (user.role !== 'carrier' && user.role !== 'driver') {
+      return NextResponse.json({ success: false, message: 'Only carriers and drivers can make offers' }, { status: 403 });
     }
 
     const { loadId } = params;

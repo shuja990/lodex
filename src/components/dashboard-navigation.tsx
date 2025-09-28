@@ -40,7 +40,7 @@ export function DashboardNavigation() {
         <div className="flex h-16 items-center justify-between">
           <div className="flex items-center space-x-4">
             <ResponsiveSidebar variant="dashboard" />
-            <Link href="/dashboard" className="flex items-center space-x-3">
+            <Link href="/" className="flex items-center space-x-3">
               <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-white border-2 border-primary/20 p-1 shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 

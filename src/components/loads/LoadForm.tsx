@@ -1,62 +1,272 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Separator } from '@/components/ui/separator';
-import { AddressAutocompleteController, MapboxMap } from '@/components/mapbox';
-import { CreateLoadRequest, UpdateLoadRequest, LoadLocation, LoadType, EquipmentType, Load } from '@/types/load';
-import { Save, MapPin, Phone } from 'lucide-react';
-import { getRoute } from '@/lib/geolocation';
+import { useEffect, useMemo, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
-const loadTypes: LoadType[] = ['Full Truckload', 'Less Than Truckload', 'Partial Load', 'Expedited', 'Temperature Controlled'];
-const equipmentTypes: EquipmentType[] = ['Dry Van', 'Flatbed', 'Refrigerated', 'Box Truck', 'Step Deck', 'Lowboy', 'Tanker', 'Other'];
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
+import { AddressAutocompleteController, MapboxMap } from "@/components/mapbox";
+import type {
+  CreateLoadRequest,
+  UpdateLoadRequest,
+  LoadLocation,
+  LoadType,
+  EquipmentType,
+  Load,
+} from "@/types/load";
+import { Save, MapPin, Phone } from "lucide-react";
+import { getRoute } from "@/lib/geolocation";
+
+const loadTypes: LoadType[] = [
+  "Full Truckload",
+  "Less Than Truckload",
+  "Partial Load",
+  "Expedited",
+  "Temperature Controlled",
+];
+const equipmentTypes: EquipmentType[] = [
+  "Dry Van",
+  "Flatbed",
+  "Refrigerated",
+  "Box Truck",
+  "Step Deck",
+  "Lowboy",
+  "Tanker",
+  "Other",
+];
+
+// Schema
+const coordinatesSchema = z.object({
+  latitude: z.number(),
+  longitude: z.number(),
+});
+
+const locationSchema = z.object({
+  address: z.string().min(1),
+  city: z.string().optional().nullable(),
+  state: z.string().optional().nullable(),
+  zipCode: z.string().optional().nullable(),
+  coordinates: coordinatesSchema,
+});
+
+const formSchema = z
+  .object({
+    // locations
+    origin: locationSchema,
+    destination: locationSchema,
+
+    // details
+    loadType: z.enum([
+      "Full Truckload",
+      "Less Than Truckload",
+      "Partial Load",
+      "Expedited",
+      "Temperature Controlled",
+    ]),
+    equipmentType: z.enum([
+      "Dry Van",
+      "Flatbed",
+      "Refrigerated",
+      "Box Truck",
+      "Step Deck",
+      "Lowboy",
+      "Tanker",
+      "Other",
+    ]),
+    weight: z.coerce
+      .number()
+      .positive({ message: "Weight must be greater than 0" }),
+    length: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    width: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    height: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    pieces: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    description: z.string().min(1, "Description is required"),
+    specialInstructions: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    hazmat: z.boolean().default(false),
+    temperatureControlled: z.boolean().default(false),
+    tempMin: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    tempMax: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+
+    // schedule
+    pickupDate: z.string().min(1, "Pickup date is required"),
+    deliveryDate: z.string().min(1, "Delivery date is required"),
+    pickupTime: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    deliveryTime: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+
+    // rate
+    rate: z.coerce
+      .number()
+      .nonnegative({ message: "Rate must be 0 or greater" }),
+
+    // contacts
+    pickupContactName: z.string().min(1, "Pickup contact name is required"),
+    pickupContactPhone: z.string().min(1, "Pickup contact phone is required"),
+    pickupContactEmail: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    deliveryContactName: z.string().min(1, "Delivery contact name is required"),
+    deliveryContactPhone: z
+      .string()
+      .min(1, "Delivery contact phone is required"),
+    deliveryContactEmail: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+
+    referenceNumber: z
+      .string()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+  })
+  .superRefine((vals, ctx) => {
+    // date logic
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      if (vals.pickupDate < today) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Pickup date cannot be in the past",
+          path: ["pickupDate"],
+        });
+      }
+      if (vals.deliveryDate < today) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Delivery date cannot be in the past",
+          path: ["deliveryDate"],
+        });
+      }
+      if (vals.deliveryDate < vals.pickupDate) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Delivery cannot be before pickup",
+          path: ["deliveryDate"],
+        });
+      }
+      if (vals.temperatureControlled) {
+        if (vals.tempMin === undefined || vals.tempMax === undefined) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Provide both min and max temperature",
+            path: ["tempMin"],
+          });
+        } else if (vals.tempMin > vals.tempMax) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Min temperature cannot exceed max",
+            path: ["tempMin"],
+          });
+        }
+      }
+    } catch {
+      // ignore parse errors, handled as required strings
+    }
+  });
+
+type LoadFormData = z.infer<typeof formSchema>;
 
 export interface LoadFormProps {
   load?: Load;
   onSubmit: (data: CreateLoadRequest | UpdateLoadRequest) => Promise<void>;
   onCancel?: () => void;
   isSubmitting?: boolean;
-  mode?: 'create' | 'edit';
+  mode?: "create" | "edit";
 }
 
-interface LoadFormData {
-  // Locations
-  origin: LoadLocation | null;
-  destination: LoadLocation | null;
-  // Add the rest of the fields as before...
-  loadType: LoadType;
-  equipmentType: EquipmentType;
-  weight: string;
-  length: string;
-  width: string;
-  height: string;
-  pieces: string;
-  description: string;
-  specialInstructions: string;
-  hazmat: boolean;
-  temperatureControlled: boolean;
-  tempMin: string;
-  tempMax: string;
-  pickupDate: string;
-  deliveryDate: string;
-  pickupTime: string;
-  deliveryTime: string;
-  rate: string;
-  pickupContactName: string;
-  pickupContactPhone: string;
-  pickupContactEmail: string;
-  deliveryContactName: string;
-  deliveryContactPhone: string;
-  deliveryContactEmail: string;
-  referenceNumber: string;
+function toDefaultValues(load?: Load): LoadFormData {
+  const today = new Date().toISOString().split("T")[0];
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    .toISOString()
+    .split("T")[0];
+
+  return {
+    origin: load?.origin || {
+      address: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      coordinates: { latitude: 0, longitude: 0 },
+    },
+    destination: load?.destination || {
+      address: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      coordinates: { latitude: 0, longitude: 0 },
+    },
+    loadType: load?.loadType || "Full Truckload",
+    equipmentType: load?.equipmentType || "Dry Van",
+    weight: load?.details.weight ?? 1000,
+    length: load?.details.length ?? "",
+    width: load?.details.width ?? "",
+    height: load?.details.height ?? "",
+    pieces: load?.details.pieces ?? "",
+    description: load?.details.description || "General cargo",
+    specialInstructions: load?.details.specialInstructions ?? "",
+    hazmat: !!load?.details.hazmat,
+    temperatureControlled: !!load?.details.temperatureControlled,
+    tempMin: load?.details.temperatureRange?.min ?? "",
+    tempMax: load?.details.temperatureRange?.max ?? "",
+    pickupDate: load?.pickupDate
+      ? new Date(load.pickupDate).toISOString().split("T")[0]
+      : today,
+    deliveryDate: load?.deliveryDate
+      ? new Date(load.deliveryDate).toISOString().split("T")[0]
+      : tomorrow,
+    pickupTime: load?.pickupTime ?? "",
+    deliveryTime: load?.deliveryTime ?? "",
+    rate: load?.rate ?? 1000,
+    pickupContactName: load?.contactInfo.pickup.name || "John Doe",
+    pickupContactPhone: load?.contactInfo.pickup.phone || "555-123-4567",
+    pickupContactEmail: load?.contactInfo.pickup.email || "",
+    deliveryContactName: load?.contactInfo.delivery.name || "Jane Smith",
+    deliveryContactPhone: load?.contactInfo.delivery.phone || "555-987-6543",
+    deliveryContactEmail: load?.contactInfo.delivery.email || "",
+    referenceNumber: load?.referenceNumber || ""
+  };
 }
 
 export default function LoadForm({
@@ -64,10 +274,9 @@ export default function LoadForm({
   onSubmit,
   onCancel,
   isSubmitting = false,
-  mode = 'create'
+  mode = "create",
 }: LoadFormProps) {
-  const [activeTab, setActiveTab] = useState('locations');
-  const [showPreview, setShowPreview] = useState(false);
+  const [activeTab, setActiveTab] = useState("locations");
   const [isSelectingOrigin, setIsSelectingOrigin] = useState(false);
   const [isSelectingDestination, setIsSelectingDestination] = useState(false);
   const [routeCoords, setRouteCoords] = useState<Array<[number, number]>>([]);
@@ -75,434 +284,271 @@ export default function LoadForm({
   const [completedTabs, setCompletedTabs] = useState<Set<string>>(new Set());
 
   const {
-    register,
     handleSubmit,
     control,
-    formState: { errors },
-    setValue,
     watch,
-    getValues
+    setValue,
+    getValues,
+    reset,
+    formState: { errors, isValid },
   } = useForm<LoadFormData>({
-    // Keep field values when components unmount (e.g., switching tabs)
+    resolver: zodResolver(formSchema),
+    mode: "onChange",
     shouldUnregister: false,
-    // Validate as user types/changes to enable Next button reactively
-    mode: 'onChange',
-    defaultValues: {
-      origin: load?.origin || null,
-      destination: load?.destination || null,
-      loadType: load?.loadType || 'Full Truckload',
-      equipmentType: load?.equipmentType || 'Dry Van',
-      weight: load?.details.weight?.toString() || '1000',
-      length: load?.details.length?.toString() || '',
-      width: load?.details.width?.toString() || '',
-      height: load?.details.height?.toString() || '',
-      pieces: load?.details.pieces?.toString() || '',
-      description: load?.details.description || 'General cargo',
-      specialInstructions: load?.details.specialInstructions || '',
-      hazmat: load?.details.hazmat || false,
-      temperatureControlled: load?.details.temperatureControlled || false,
-      tempMin: load?.details.temperatureRange?.min?.toString() || '',
-      tempMax: load?.details.temperatureRange?.max?.toString() || '',
-  pickupDate: load?.pickupDate ? new Date(load.pickupDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-  deliveryDate: load?.deliveryDate ? new Date(load.deliveryDate).toISOString().split('T')[0] : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      pickupTime: load?.pickupTime || '',
-      deliveryTime: load?.deliveryTime || '',
-      rate: load?.rate?.toString() || '1000',
-      pickupContactName: load?.contactInfo.pickup.name || 'John Doe',
-      pickupContactPhone: load?.contactInfo.pickup.phone || '555-123-4567',
-      pickupContactEmail: load?.contactInfo.pickup.email || '',
-      deliveryContactName: load?.contactInfo.delivery.name || 'Jane Smith',
-      deliveryContactPhone: load?.contactInfo.delivery.phone || '555-987-6543',
-      deliveryContactEmail: load?.contactInfo.delivery.email || '',
-      referenceNumber: load?.referenceNumber || ''
-    }
+    defaultValues: useMemo(() => toDefaultValues(load), [load]),
   });
 
-  const watchedOrigin = watch('origin');
-  const watchedDestination = watch('destination');
-  const watchedTemperatureControlled = watch('temperatureControlled');
-  const watchedWeight = watch('weight');
-  const watchedLoadType = watch('loadType');
-  const watchedEquipmentType = watch('equipmentType');
-  // Watch pickup and delivery dates for dynamic min/max
-  const watchedPickupDate = watch('pickupDate');
-  // watchedDeliveryDate removed as max is not used
-
-  // Force re-render when form values change to update button states
-  const [, setForceUpdate] = useState({});
   useEffect(() => {
-    setForceUpdate({});
-  }, [watchedWeight, watchedLoadType, watchedEquipmentType, watchedOrigin, watchedDestination]);
+    if (mode === "edit" && load) {
+      reset(toDefaultValues(load), { keepDirty: false, keepValues: false });
+    }
+  }, [mode, load, reset]);
 
-  // Tab validation functions
+  const watched = watch();
+  const watchedOrigin = watched.origin;
+  const watchedDestination = watched.destination;
+  const watchedTemperatureControlled = watched.temperatureControlled;
+  const watchedPickupDate = watched.pickupDate;
+
+  // Tab-level validation slices
   const validateLocationsTab = () => {
-    const { origin, destination } = getValues();
-    return Boolean(origin?.coordinates?.latitude && origin?.coordinates?.longitude && 
-                  destination?.coordinates?.latitude && destination?.coordinates?.longitude);
+    const vals = getValues();
+    try {
+      locationSchema.parse(vals.origin);
+      locationSchema.parse(vals.destination);
+      return true;
+    } catch {
+      return false;
+    }
   };
+  // Tab validation slices (define as new z.object, not .pick)
+  const detailsSlice = z.object({
+    loadType: z.enum([
+      "Full Truckload",
+      "Less Than Truckload",
+      "Partial Load",
+      "Expedited",
+      "Temperature Controlled",
+    ]),
+    equipmentType: z.enum([
+      "Dry Van",
+      "Flatbed",
+      "Refrigerated",
+      "Box Truck",
+      "Step Deck",
+      "Lowboy",
+      "Tanker",
+      "Other",
+    ]),
+    weight: z.coerce
+      .number()
+      .positive({ message: "Weight must be greater than 0" }),
+    description: z.string().min(1, "Description is required"),
+    rate: z.coerce
+      .number()
+      .nonnegative({ message: "Rate must be 0 or greater" }),
+    hazmat: z.boolean().default(false),
+    temperatureControlled: z.boolean().default(false),
+    tempMin: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+    tempMax: z.coerce
+      .number()
+      .optional()
+      .or(z.literal("").transform(() => undefined)),
+  });
 
-  const validateDetailsTab = () => {
-    const { weight, loadType, description, rate } = getValues();
-    const isValid = Boolean(weight && loadType && description && rate);
-    console.log('Details tab validation:', { 
-      weight, 
-      loadType, 
-      description,
-      rate,
-      isValid
-    });
-    return isValid;
-  };
+  const scheduleSlice = z.object({
+    pickupDate: z.string().min(1, "Pickup date is required"),
+    deliveryDate: z.string().min(1, "Delivery date is required"),
+    pickupTime: z.string().optional().or(z.literal("").transform(() => undefined)),
+    deliveryTime: z.string().optional().or(z.literal("").transform(() => undefined)),
+  });
 
-  const validateTimingTab = () => {
-    const { pickupDate, deliveryDate } = getValues();
-    if (!pickupDate || !deliveryDate) return false;
-    const todayStr = new Date().toISOString().split('T')[0];
-    // Not in the past
-    if (pickupDate < todayStr || deliveryDate < todayStr) return false;
-    // Delivery cannot be before pickup
-    if (deliveryDate < pickupDate) return false;
-    return true;
-  };
+  const contactsSlice = z.object({
+    pickupContactName: z.string().min(1, "Pickup contact name is required"),
+    pickupContactPhone: z.string().min(1, "Pickup contact phone is required"),
+    deliveryContactName: z.string().min(1, "Delivery contact name is required"),
+    deliveryContactPhone: z.string().min(1, "Delivery contact phone is required"),
+  });
+
+  const validateDetailsTab = () => detailsSlice.safeParse(getValues()).success;
+  const validateScheduleTab = () =>
+    scheduleSlice.safeParse(getValues()).success;
+  const validateContactsTab = () =>
+    contactsSlice.safeParse(getValues()).success;
 
   const isTabValid = (tab: string) => {
     switch (tab) {
-      case 'locations': return validateLocationsTab();
-      case 'details': return validateDetailsTab();
-      case 'timing': return validateTimingTab();
-      case 'schedule': return validateTimingTab(); // schedule is same as timing
-      default: return true;
+      case "locations":
+        return validateLocationsTab();
+      case "details":
+        return validateDetailsTab();
+      case "schedule":
+        return validateScheduleTab();
+      case "contacts":
+        return validateContactsTab();
+      default:
+        return true;
     }
+  };
+
+  const tabOrder = ["locations", "details", "schedule", "contacts"] as const;
+  const canProceedToTab = (target: string, current: string) => {
+    const currentIndex = tabOrder.indexOf(current as typeof tabOrder[number]);
+    const targetIndex = tabOrder.indexOf(target as typeof tabOrder[number]);
+    if (targetIndex <= currentIndex) return true;
+    return isTabValid(current);
   };
 
   const markTabCompleted = (tab: string) => {
     if (isTabValid(tab)) {
-      setCompletedTabs(prev => new Set([...prev, tab]));
+      setCompletedTabs((prev) => new Set([...prev, tab]));
     }
-  };
-
-  const canProceedToTab = (tab: string, currentTab: string) => {
-    const tabOrder = ['locations', 'details', 'schedule', 'contacts'];
-    const currentIndex = tabOrder.indexOf(currentTab);
-    const targetIndex = tabOrder.indexOf(tab);
-    
-    // Can always go back
-    if (targetIndex <= currentIndex) return true;
-    
-    // Can go forward only if current tab is valid
-    return isTabValid(currentTab);
   };
 
   const handleTabChange = (tab: string) => {
     console.log(`Changing from ${activeTab} to ${tab}`);
-    
-    // Save current form state before changing tabs
-    const currentValues = getValues();
-    console.log('Current form values:', currentValues);
-    localStorage.setItem('loadFormData', JSON.stringify(currentValues));
-    
     if (canProceedToTab(tab, activeTab)) {
       markTabCompleted(activeTab);
       setActiveTab(tab);
-    } else {
-      console.log(`Cannot proceed to ${tab} from ${activeTab}`);
     }
   };
 
   const handleNextTab = () => {
-    console.log('Next tab clicked from:', activeTab);
-    
-    // Force save current state
-    const currentValues = getValues();
-    localStorage.setItem('loadFormData', JSON.stringify(currentValues));
-    
-    const tabOrder = ['locations', 'details', 'schedule', 'contacts'];
-    const currentIndex = tabOrder.indexOf(activeTab);
+    const currentIndex = tabOrder.indexOf(activeTab as typeof tabOrder[number]);
     if (currentIndex < tabOrder.length - 1 && isTabValid(activeTab)) {
       const nextTab = tabOrder[currentIndex + 1];
       markTabCompleted(activeTab);
       setActiveTab(nextTab);
-      console.log('Moved to:', nextTab);
-    } else {
-      console.log('Cannot move to next tab - validation failed or at end');
     }
   };
 
   const handlePrevTab = () => {
-    const tabOrder = ['locations', 'details', 'schedule', 'contacts'];
-    const currentIndex = tabOrder.indexOf(activeTab);
+    const currentIndex = tabOrder.indexOf(activeTab as typeof tabOrder[number]);
     if (currentIndex > 0) {
       setActiveTab(tabOrder[currentIndex - 1]);
     }
   };
 
-  // Auto-save form data to localStorage for persistence
-  const watchedValues = watch();
-  useEffect(() => {
-    if (mode === 'create') {
-      // Filter out undefined values before saving
-      const filteredValues = Object.fromEntries(
-        Object.entries(watchedValues).filter(([, value]) => value !== undefined)
-      );
-      console.log('Saving form data to localStorage:', filteredValues);
-      localStorage.setItem('loadFormData', JSON.stringify(filteredValues));
-    }
-  }, [watchedValues, mode]);
-
-  // Restore form data on mount  
-  useEffect(() => {
-    console.log('Form initialization - mode:', mode, 'load:', load);
-    
-    if (mode === 'create' && !load) {
-      // Add a small delay to ensure form is fully initialized
-      setTimeout(() => {
-        const currentDefaults = getValues();
-        console.log('Current form defaults before restore:', currentDefaults);
-        
-        const savedData = localStorage.getItem('loadFormData');
-        if (savedData) {
-          try {
-            const parsedData = JSON.parse(savedData);
-            console.log('Attempting to restore form data:', parsedData);
-            
-            // Define fields that should keep their defaults if saved value is empty
-            const fieldsWithDefaults = ['description', 'rate', 'weight', 'loadType', 'equipmentType'];
-            
-            // Only restore fields that have meaningful values and differ from defaults
-            Object.keys(parsedData).forEach(key => {
-              const value = parsedData[key];
-              const currentValue = currentDefaults[key as keyof LoadFormData];
-              
-              // For fields with defaults, only restore if we have a meaningful non-default value
-              if (fieldsWithDefaults.includes(key)) {
-                if (value && value !== '' && value !== null && value !== undefined) {
-                  console.log(`Restoring ${key}: "${currentValue}" -> "${value}"`);
-                  setValue(key as keyof LoadFormData, value, { 
-                    shouldValidate: true,
-                    shouldDirty: true 
-                  });
-                } else {
-                  console.log(`Keeping default for ${key}: "${currentValue}" (saved was: "${value}")`);
-                }
-              } else {
-                // For other fields, restore if meaningful and different
-                if (value !== undefined && value !== null && value !== '' && value !== currentValue) {
-                  console.log(`Restoring ${key}: "${currentValue}" -> "${value}"`);
-                  setValue(key as keyof LoadFormData, value, { 
-                    shouldValidate: true,
-                    shouldDirty: true 
-                  });
-                }
-              }
-            });
-          } catch (error) {
-            console.error('Error restoring form data:', error);
-          }
-        } else {
-          console.log('No saved form data found');
-        }
-      }, 100);
-    }
-  }, [mode, load, setValue, getValues]);
-
-  // Clear saved data on successful submit
-  const clearSavedData = () => {
-    localStorage.removeItem('loadFormData');
-  };
-
-  // Fetch a driving route when both locations are present
+  // route compute
   useEffect(() => {
     let active = true;
     const fetchRoute = async () => {
-      if (!watchedOrigin || !watchedDestination) {
+      if (!watchedOrigin?.coordinates || !watchedDestination?.coordinates) {
         setRouteCoords([]);
         return;
       }
       try {
-        console.log('Fetching route between:', watchedOrigin, watchedDestination);
         setIsRouteLoading(true);
-        const routeData = await getRoute(watchedOrigin.coordinates, watchedDestination.coordinates);
-        console.log('Route data received:', routeData);
-        if (active && routeData && routeData.routes && routeData.routes[0]) {
-          console.log('Setting route coordinates:', routeData.routes[0].geometry.coordinates);
+        const routeData = await getRoute(
+          watchedOrigin.coordinates,
+          watchedDestination.coordinates
+        );
+        if (active && routeData?.routes?.[0]) {
           setRouteCoords(routeData.routes[0].geometry.coordinates);
-        } else {
-          console.log('No route data or no active component');
-          if (active) setRouteCoords([]);
+        } else if (active) {
+          setRouteCoords([]);
         }
       } catch (err) {
-        console.error('Error fetching driving route:', err);
+        console.error("Error fetching driving route:", err);
         if (active) setRouteCoords([]);
       } finally {
         if (active) setIsRouteLoading(false);
       }
     };
     fetchRoute();
-    return () => { active = false; };
-  }, [watchedOrigin, watchedDestination]);
+    return () => {
+      active = false;
+    };
+  }, [watchedOrigin?.coordinates, watchedDestination?.coordinates]);
 
-  // Show preview when both locations are selected
-  useEffect(() => {
-    if (watchedOrigin && watchedDestination) {
-      setShowPreview(true);
-    } else {
-      setShowPreview(false);
-    }
-  }, [watchedOrigin, watchedDestination]);
-
-  // Function to reverse geocode coordinates to address
-  const reverseGeocode = async (coordinates: [number, number]): Promise<LoadLocation | null> => {
-    try {
-      const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
-      if (!accessToken) {
-        throw new Error('Mapbox access token not configured');
-      }
-
-      const [longitude, latitude] = coordinates;
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${accessToken}&types=address`;
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Reverse geocoding request failed');
-      }
-      
-      const data = await response.json();
-      const feature = data.features?.[0];
-      
-      if (feature) {
-        // Extract address components
-        const addressComponents = feature.context || [];
-        let city = '', state = '', zipCode = '';
-        
-        for (const component of addressComponents) {
-          if (component.id.includes('place')) {
-            city = component.text;
-          } else if (component.id.includes('region')) {
-            state = component.short_code || component.text;
-          } else if (component.id.includes('postcode')) {
-            zipCode = component.text;
-          }
-        }
-
-        return {
-          address: feature.place_name,
-          city,
-          state,
-          zipCode,
-          coordinates: { latitude, longitude }
-        };
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error reverse geocoding:', error);
-      return null;
-    }
-  };
-
-  // Handle map click for address selection
+  // map helpers (stubbed reverse geocode is inside AddressAutocomplete in this demo)
   const handleMapClick = async (coordinates: [number, number]) => {
     if (!isSelectingOrigin && !isSelectingDestination) return;
-    
-    const location = await reverseGeocode(coordinates);
-    if (location) {
-      if (isSelectingOrigin) {
-        setValue('origin', location);
-        setIsSelectingOrigin(false);
-      } else if (isSelectingDestination) {
-        setValue('destination', location);
-        setIsSelectingDestination(false);
-      }
-    }
-  };
-
-  // Handle marker drag to update the corresponding address via reverse geocoding
-  const handleMarkerDragEnd = async ({ id, coordinates }: { id?: string; coordinates: [number, number] }) => {
     const [lng, lat] = coordinates;
-    const location = await reverseGeocode([lng, lat]);
-    if (!location) return;
-    if (id === 'origin') {
-      setValue('origin', location);
-    } else if (id === 'destination') {
-      setValue('destination', location);
+    const location: LoadLocation = {
+      address: `Selected at ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      city: "",
+      state: "",
+      zipCode: "",
+      coordinates: { latitude: lat, longitude: lng },
+    };
+    if (isSelectingOrigin) {
+      setValue("origin", location, { shouldValidate: true });
+      setIsSelectingOrigin(false);
+    } else if (isSelectingDestination) {
+      setValue("destination", location, { shouldValidate: true });
+      setIsSelectingDestination(false);
     }
   };
 
-  const handleFormSubmit = async (data: LoadFormData) => {
-    console.log('Form submit started with data:', data);
-    
-    if (!data.origin || !data.destination) {
-      alert('Please select both pickup and delivery locations');
-      return;
-    }
+  const handleMarkerDragEnd = async ({
+    id,
+    coordinates,
+  }: {
+    id?: string;
+    coordinates: [number, number];
+  }) => {
+    const [lng, lat] = coordinates;
+    const location: LoadLocation = {
+      address: `Moved to ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+      city: "",
+      state: "",
+      zipCode: "",
+      coordinates: { latitude: lat, longitude: lng },
+    };
+    if (id === "origin") setValue("origin", location, { shouldValidate: true });
+    if (id === "destination")
+      setValue("destination", location, { shouldValidate: true });
+  };
 
-    // Set default values for required fields that might be empty
-    const defaultWeight = data.weight || "1000";
-    const defaultRate = data.rate || "1000";
-    const defaultPickupDate = data.pickupDate || new Date().toISOString().split('T')[0];
-    const defaultDeliveryDate = data.deliveryDate || new Date(Date.now() + 86400000).toISOString().split('T')[0]; // tomorrow
-    const defaultDescription = data.description || "Load shipment";
-    const defaultPickupContactName = data.pickupContactName || "Contact";
-    const defaultPickupContactPhone = data.pickupContactPhone || "555-0000";
-    const defaultDeliveryContactName = data.deliveryContactName || "Contact";
-    const defaultDeliveryContactPhone = data.deliveryContactPhone || "555-0000";
-
-    // Defensive checks for contact info
-    if (!defaultPickupContactName || !defaultPickupContactPhone || !defaultDeliveryContactName || !defaultDeliveryContactPhone) {
-      alert('Pickup and delivery contact name and phone are required.');
-      return;
-    }
-
-    try {
-      const formData: CreateLoadRequest | UpdateLoadRequest = {
-        origin: data.origin,
-        destination: data.destination,
-        loadType: data.loadType,
-        equipmentType: data.equipmentType,
-        details: {
-          weight: parseFloat(defaultWeight),
-          length: data.length ? parseFloat(data.length) : undefined,
-          width: data.width ? parseFloat(data.width) : undefined,
-          height: data.height ? parseFloat(data.height) : undefined,
-          pieces: data.pieces ? parseInt(data.pieces) : undefined,
-          description: defaultDescription,
-          specialInstructions: data.specialInstructions || undefined,
-          hazmat: data.hazmat,
-          temperatureControlled: data.temperatureControlled,
-          temperatureRange: data.temperatureControlled && data.tempMin && data.tempMax ? {
-            min: parseFloat(data.tempMin),
-            max: parseFloat(data.tempMax)
-          } : undefined
+  const onFormSubmit = async (data: LoadFormData) => {
+    // Build API payload
+    const payload: CreateLoadRequest | UpdateLoadRequest = {
+      origin: data.origin,
+      destination: data.destination,
+      loadType: data.loadType,
+      equipmentType: data.equipmentType,
+      details: {
+        weight: data.weight,
+        length: data.length,
+        width: data.width,
+        height: data.height,
+        pieces: data.pieces,
+        description: data.description,
+        specialInstructions: data.specialInstructions,
+        hazmat: data.hazmat,
+        temperatureControlled: data.temperatureControlled,
+        temperatureRange:
+          data.temperatureControlled &&
+          data.tempMin !== undefined &&
+          data.tempMax !== undefined
+            ? { min: data.tempMin, max: data.tempMax }
+            : undefined,
+      },
+      pickupDate: data.pickupDate,
+      deliveryDate: data.deliveryDate,
+      pickupTime: data.pickupTime,
+      deliveryTime: data.deliveryTime,
+      rate: data.rate,
+      contactInfo: {
+        pickup: {
+          name: data.pickupContactName,
+          phone: data.pickupContactPhone,
+          email: data.pickupContactEmail,
         },
-        pickupDate: defaultPickupDate,
-        deliveryDate: defaultDeliveryDate,
-        pickupTime: data.pickupTime || undefined,
-        deliveryTime: data.deliveryTime || undefined,
-        rate: parseFloat(defaultRate),
-        contactInfo: {
-          pickup: {
-            name: defaultPickupContactName,
-            phone: defaultPickupContactPhone,
-            email: data.pickupContactEmail || undefined
-          },
-          delivery: {
-            name: defaultDeliveryContactName,
-            phone: defaultDeliveryContactPhone,
-            email: data.deliveryContactEmail || undefined
-          }
+        delivery: {
+          name: data.deliveryContactName,
+          phone: data.deliveryContactPhone,
+          email: data.deliveryContactEmail,
         },
-        referenceNumber: data.referenceNumber || undefined
-      };
+      },
+      referenceNumber: data.referenceNumber,
+    };
 
-      console.log('Submitting form data:', formData);
-
-      await onSubmit(formData);
-      console.log('Form submission successful');
-      clearSavedData(); // Clear saved form data on successful submit
-    } catch (error) {
-      console.error('Form submission error:', error);
-      alert(error instanceof Error ? error.message : 'Failed to submit form');
-    }
+    await onSubmit(payload);
   };
 
   return (
@@ -510,13 +556,12 @@ export default function LoadForm({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">
-            {mode === 'create' ? 'Create New Load' : 'Edit Load'}
+            {mode === "create" ? "Create New Load" : "Edit Load"}
           </h1>
-          <p className="text-gray-600">
-            {mode === 'create' 
-              ? 'Fill out the form below to post a new load'
-              : 'Update the load information below'
-            }
+          <p className="text-muted-foreground">
+            {mode === "create"
+              ? "Fill out the form below to post a new load"
+              : "Update the load information below"}
           </p>
         </div>
         {onCancel && (
@@ -528,50 +573,65 @@ export default function LoadForm({
 
       <Card>
         <CardContent className="p-6">
-          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+          <form onSubmit={handleSubmit(onFormSubmit)} className="space-y-6">
             <Tabs value={activeTab} onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger 
-                  value="locations" 
-                  className={completedTabs.has('locations') ? 'bg-green-100 text-green-800' : ''}
+                <TabsTrigger
+                  value="locations"
+                  className={
+                    completedTabs.has("locations")
+                      ? "bg-green-100 text-green-800"
+                      : ""
+                  }
                 >
-                  Locations {completedTabs.has('locations') && '✓'}
+                  Locations {completedTabs.has("locations") && "✓"}
                 </TabsTrigger>
-                <TabsTrigger 
+                <TabsTrigger
                   value="details"
-                  disabled={!canProceedToTab('details', activeTab)}
-                  className={completedTabs.has('details') ? 'bg-green-100 text-green-800' : ''}
+                  disabled={!canProceedToTab("details", activeTab)}
+                  className={
+                    completedTabs.has("details")
+                      ? "bg-green-100 text-green-800"
+                      : ""
+                  }
                 >
-                  Load Details {completedTabs.has('details') && '✓'}
+                  Load Details {completedTabs.has("details") && "✓"}
                 </TabsTrigger>
-                <TabsTrigger 
+                <TabsTrigger
                   value="schedule"
-                  disabled={!canProceedToTab('schedule', activeTab)}
-                  className={completedTabs.has('schedule') ? 'bg-green-100 text-green-800' : ''}
+                  disabled={!canProceedToTab("schedule", activeTab)}
+                  className={
+                    completedTabs.has("schedule")
+                      ? "bg-green-100 text-green-800"
+                      : ""
+                  }
                 >
-                  Schedule {completedTabs.has('schedule') && '✓'}
+                  Schedule {completedTabs.has("schedule") && "✓"}
                 </TabsTrigger>
-                <TabsTrigger 
+                <TabsTrigger
                   value="contacts"
-                  disabled={!canProceedToTab('contacts', activeTab)}
-                  className={completedTabs.has('contacts') ? 'bg-green-100 text-green-800' : ''}
+                  disabled={!canProceedToTab("contacts", activeTab)}
+                  className={
+                    completedTabs.has("contacts")
+                      ? "bg-green-100 text-green-800"
+                      : ""
+                  }
                 >
-                  Contacts {completedTabs.has('contacts') && '✓'}
+                  Contacts {completedTabs.has("contacts") && "✓"}
                 </TabsTrigger>
               </TabsList>
 
-              {/* Locations Tab */}
+              {/* Locations */}
               <TabsContent value="locations" className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                      <AddressAutocompleteController<LoadFormData>
+                      <AddressAutocompleteController
                         name="origin"
                         control={control}
                         label="Pickup Location"
                         placeholder="Enter pickup address..."
                         required
-                        rules={{ required: 'Pickup location is required' }}
                       />
                       <Button
                         type="button"
@@ -584,20 +644,23 @@ export default function LoadForm({
                         className="mt-6"
                       >
                         <MapPin className="h-4 w-4" />
-                        {isSelectingOrigin ? 'Cancel' : 'Pick on Map'}
+                        {isSelectingOrigin ? "Cancel" : "Pick on Map"}
                       </Button>
                     </div>
+                    {errors.origin && (
+                      <p className="text-sm text-red-600">
+                        Please select a valid pickup location
+                      </p>
+                    )}
                   </div>
-                  
                   <div className="space-y-4">
                     <div className="flex items-center gap-2">
-                      <AddressAutocompleteController<LoadFormData>
+                      <AddressAutocompleteController
                         name="destination"
                         control={control}
                         label="Delivery Location"
                         placeholder="Enter delivery address..."
                         required
-                        rules={{ required: 'Delivery location is required' }}
                       />
                       <Button
                         type="button"
@@ -610,62 +673,98 @@ export default function LoadForm({
                         className="mt-6"
                       >
                         <MapPin className="h-4 w-4" />
-                        {isSelectingDestination ? 'Cancel' : 'Pick on Map'}
+                        {isSelectingDestination ? "Cancel" : "Pick on Map"}
                       </Button>
                     </div>
+                    {errors.destination && (
+                      <p className="text-sm text-red-600">
+                        Please select a valid delivery location
+                      </p>
+                    )}
                   </div>
                 </div>
 
-                {/* Interactive Map */}
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-medium">Interactive Map</h3>
                     {(isSelectingOrigin || isSelectingDestination) && (
                       <div className="text-sm text-blue-600 bg-blue-50 px-3 py-1 rounded">
-                        Click on the map to select {isSelectingOrigin ? 'pickup' : 'delivery'} location
+                        Click on the map to select{" "}
+                        {isSelectingOrigin ? "pickup" : "delivery"} location
                       </div>
                     )}
                     {isRouteLoading && (
-                      <div className="text-sm text-gray-600">Building route…</div>
+                      <div className="text-sm text-muted-foreground">
+                        Building route…
+                      </div>
                     )}
                   </div>
+
                   <MapboxMap
-                    height="500px"
+                    height="400px"
                     center={[-98.5795, 39.8283]}
                     zoom={4}
                     markers={[
-                      ...(watchedOrigin ? [{
-                        coordinates: [
-                          watchedOrigin.coordinates.longitude,
-                          watchedOrigin.coordinates.latitude
-                        ] as [number, number],
-                        color: '#10B981',
-                        popup: `<strong>Pickup:</strong><br/>${watchedOrigin.address}`,
-                        id: 'origin'
-                      }] : []),
-                      ...(watchedDestination ? [{
-                        coordinates: [
-                          watchedDestination.coordinates.longitude,
-                          watchedDestination.coordinates.latitude
-                        ] as [number, number],
-                        color: '#EF4444',
-                        popup: `<strong>Delivery:</strong><br/>${watchedDestination.address}`,
-                        id: 'destination'
-                      }] : [])
+                      ...(watchedOrigin && 
+                          watchedOrigin.coordinates.latitude !== 0 && 
+                          watchedOrigin.coordinates.longitude !== 0
+                        ? ([
+                            {
+                              coordinates: [
+                                watchedOrigin.coordinates.longitude,
+                                watchedOrigin.coordinates.latitude,
+                              ] as [number, number],
+                              color: "#10B981",
+                              id: "origin",
+                            },
+                          ] as const)
+                        : []),
+                      ...(watchedDestination && 
+                          watchedDestination.coordinates.latitude !== 0 && 
+                          watchedDestination.coordinates.longitude !== 0
+                        ? ([
+                            {
+                              coordinates: [
+                                watchedDestination.coordinates.longitude,
+                                watchedDestination.coordinates.latitude,
+                              ] as [number, number],
+                              color: "#EF4444",
+                              id: "destination",
+                            },
+                          ] as const)
+                        : []),
                     ]}
                     route={routeCoords}
                     onMapClick={handleMapClick}
                     bounds={
-                      watchedOrigin && watchedDestination ? [
-                        [
-                          Math.min(watchedOrigin.coordinates.longitude, watchedDestination.coordinates.longitude) - 0.1,
-                          Math.min(watchedOrigin.coordinates.latitude, watchedDestination.coordinates.latitude) - 0.1
-                        ],
-                        [
-                          Math.max(watchedOrigin.coordinates.longitude, watchedDestination.coordinates.longitude) + 0.1,
-                          Math.max(watchedOrigin.coordinates.latitude, watchedDestination.coordinates.latitude) + 0.1
-                        ]
-                      ] : undefined
+                      watchedOrigin && watchedDestination &&
+                      watchedOrigin.coordinates.latitude !== 0 && 
+                      watchedOrigin.coordinates.longitude !== 0 &&
+                      watchedDestination.coordinates.latitude !== 0 && 
+                      watchedDestination.coordinates.longitude !== 0
+                        ? ([
+                            [
+                              Math.min(
+                                watchedOrigin.coordinates.longitude,
+                                watchedDestination.coordinates.longitude
+                              ) - 0.1,
+                              Math.min(
+                                watchedOrigin.coordinates.latitude,
+                                watchedDestination.coordinates.latitude
+                              ) - 0.1,
+                            ],
+                            [
+                              Math.max(
+                                watchedOrigin.coordinates.longitude,
+                                watchedDestination.coordinates.longitude
+                              ) + 0.1,
+                              Math.max(
+                                watchedOrigin.coordinates.latitude,
+                                watchedDestination.coordinates.latitude
+                              ) + 0.1,
+                            ],
+                          ] as const)
+                        : undefined
                     }
                     fitBounds={!!(watchedOrigin && watchedDestination)}
                     markerDraggable
@@ -673,42 +772,33 @@ export default function LoadForm({
                   />
                 </div>
 
-                {showPreview && watchedOrigin && watchedDestination && (
-                  <div className="mt-6">
-                    <h3 className="text-lg font-medium mb-4">Route Summary</h3>
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <h4 className="font-medium text-green-600 mb-2">Pickup Location</h4>
-                          <p className="text-sm">{watchedOrigin.address}</p>
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-red-600 mb-2">Delivery Location</h4>
-                          <p className="text-sm">{watchedDestination.address}</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Navigation Buttons */}
                 <div className="flex justify-between pt-4 border-t">
-                  <div></div> {/* Empty div for spacing */}
+                  <div />
                   <Button
                     type="button"
                     onClick={handleNextTab}
-                    disabled={!isTabValid('locations')}
+                    disabled={!isTabValid("locations")}
                     className="flex items-center gap-2"
                   >
                     Next: Load Details
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </Button>
                 </div>
               </TabsContent>
 
-              {/* Load Details Tab */}
+              {/* Details */}
               <TabsContent value="details" className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-4">
@@ -717,10 +807,9 @@ export default function LoadForm({
                       <Controller
                         name="loadType"
                         control={control}
-                        rules={{ required: 'Load type is required' }}
                         render={({ field }) => (
-                          <Select 
-                            value={field.value || 'Full Truckload'}
+                          <Select
+                            value={field.value}
                             onValueChange={field.onChange}
                           >
                             <SelectTrigger>
@@ -737,7 +826,9 @@ export default function LoadForm({
                         )}
                       />
                       {errors.loadType && (
-                        <p className="text-sm text-red-600 mt-1">{errors.loadType.message}</p>
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.loadType.message}
+                        </p>
                       )}
                     </div>
 
@@ -746,10 +837,9 @@ export default function LoadForm({
                       <Controller
                         name="equipmentType"
                         control={control}
-                        rules={{ required: 'Equipment type is required' }}
                         render={({ field }) => (
-                          <Select 
-                            value={field.value || 'Dry Van'}
+                          <Select
+                            value={field.value}
                             onValueChange={field.onChange}
                           >
                             <SelectTrigger>
@@ -766,45 +856,63 @@ export default function LoadForm({
                         )}
                       />
                       {errors.equipmentType && (
-                        <p className="text-sm text-red-600 mt-1">{errors.equipmentType.message}</p>
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.equipmentType.message}
+                        </p>
                       )}
                     </div>
 
                     <div>
                       <Label htmlFor="weight">Weight (lbs) *</Label>
-                      <Input
-                        {...register('weight', { 
-                          required: 'Weight is required',
-                          pattern: {
-                            value: /^\d+(\.\d+)?$/,
-                            message: 'Please enter a valid weight'
-                          }
-                        })}
-                        type="number"
-                        step="0.01"
-                        placeholder="e.g., 40000"
+                      <Controller
+                        name="weight"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.01"
+                            placeholder="e.g., 40000"
+                            value={
+                              Number.isNaN(field.value as number)
+                                ? ""
+                                : String(field.value ?? "")
+                            }
+                            onChange={(e) => field.onChange(e.target.value)}
+                          />
+                        )}
                       />
                       {errors.weight && (
-                        <p className="text-sm text-red-600 mt-1">{errors.weight.message}</p>
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.weight.message}
+                        </p>
                       )}
                     </div>
 
                     <div>
                       <Label htmlFor="rate">Rate ($) *</Label>
-                      <Input
-                        {...register('rate', { 
-                          required: 'Rate is required',
-                          pattern: {
-                            value: /^\d+(\.\d+)?$/,
-                            message: 'Please enter a valid rate'
-                          }
-                        })}
-                        type="number"
-                        step="0.01"
-                        placeholder="e.g., 2500"
+                      <Controller
+                        name="rate"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step="0.01"
+                            placeholder="e.g., 2500"
+                            value={
+                              Number.isNaN(field.value as number)
+                                ? ""
+                                : String(field.value ?? "")
+                            }
+                            onChange={(e) => field.onChange(e.target.value)}
+                          />
+                        )}
                       />
                       {errors.rate && (
-                        <p className="text-sm text-red-600 mt-1">{errors.rate.message}</p>
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.rate.message}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -813,51 +921,107 @@ export default function LoadForm({
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <Label htmlFor="length">Length (ft)</Label>
-                        <Input
-                          {...register('length')}
-                          type="number"
-                          step="0.1"
-                          placeholder="48"
+                        <Controller
+                          name="length"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              placeholder="48"
+                              value={
+                                field.value === undefined
+                                  ? ""
+                                  : String(field.value)
+                              }
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                       </div>
                       <div>
                         <Label htmlFor="width">Width (ft)</Label>
-                        <Input
-                          {...register('width')}
-                          type="number"
-                          step="0.1"
-                          placeholder="8"
+                        <Controller
+                          name="width"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              placeholder="8"
+                              value={
+                                field.value === undefined
+                                  ? ""
+                                  : String(field.value)
+                              }
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                       </div>
                       <div>
                         <Label htmlFor="height">Height (ft)</Label>
-                        <Input
-                          {...register('height')}
-                          type="number"
-                          step="0.1"
-                          placeholder="9"
+                        <Controller
+                          name="height"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.1"
+                              placeholder="9"
+                              value={
+                                field.value === undefined
+                                  ? ""
+                                  : String(field.value)
+                              }
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                       </div>
                     </div>
 
                     <div>
                       <Label htmlFor="pieces">Number of Pieces</Label>
-                      <Input
-                        {...register('pieces')}
-                        type="number"
-                        placeholder="e.g., 20"
+                      <Controller
+                        name="pieces"
+                        control={control}
+                        render={({ field }) => (
+                          <Input
+                            type="number"
+                            inputMode="numeric"
+                            placeholder="e.g., 20"
+                            value={
+                              field.value === undefined
+                                ? ""
+                                : String(field.value)
+                            }
+                            onChange={(e) => field.onChange(e.target.value)}
+                          />
+                        )}
                       />
                     </div>
 
                     <div>
                       <Label htmlFor="description">Description *</Label>
-                      <Textarea
-                        {...register('description', { required: 'Description is required' })}
-                        placeholder="Describe the cargo..."
-                        rows={3}
+                      <Controller
+                        name="description"
+                        control={control}
+                        render={({ field }) => (
+                          <Textarea
+                            rows={3}
+                            placeholder="Describe the cargo..."
+                            {...field}
+                          />
+                        )}
                       />
                       {errors.description && (
-                        <p className="text-sm text-red-600 mt-1">{errors.description.message}</p>
+                        <p className="text-sm text-red-600 mt-1">
+                          {errors.description.message}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -867,15 +1031,29 @@ export default function LoadForm({
 
                 <div className="space-y-4">
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      {...register('hazmat')}
+                    <Controller
+                      name="hazmat"
+                      control={control}
+                      render={({ field }) => (
+                        <Checkbox
+                          checked={!!field.value}
+                          onCheckedChange={(v) => field.onChange(Boolean(v))}
+                        />
+                      )}
                     />
                     <Label>Hazardous Materials</Label>
                   </div>
 
                   <div className="flex items-center space-x-2">
-                    <Checkbox
-                      {...register('temperatureControlled')}
+                    <Controller
+                      name="temperatureControlled"
+                      control={control}
+                      render={({ field }) => (
+                        <Checkbox
+                          checked={!!field.value}
+                          onCheckedChange={(v) => field.onChange(Boolean(v))}
+                        />
+                      )}
                     />
                     <Label>Temperature Controlled</Label>
                   </div>
@@ -884,18 +1062,42 @@ export default function LoadForm({
                     <div className="grid grid-cols-2 gap-4 ml-6">
                       <div>
                         <Label htmlFor="tempMin">Min Temperature (°F)</Label>
-                        <Input
-                          {...register('tempMin')}
-                          type="number"
-                          placeholder="35"
+                        <Controller
+                          name="tempMin"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              placeholder="35"
+                              value={
+                                field.value === undefined
+                                  ? ""
+                                  : String(field.value)
+                              }
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                       </div>
                       <div>
                         <Label htmlFor="tempMax">Max Temperature (°F)</Label>
-                        <Input
-                          {...register('tempMax')}
-                          type="number"
-                          placeholder="38"
+                        <Controller
+                          name="tempMax"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="number"
+                              inputMode="decimal"
+                              placeholder="38"
+                              value={
+                                field.value === undefined
+                                  ? ""
+                                  : String(field.value)
+                              }
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                       </div>
                     </div>
@@ -903,44 +1105,70 @@ export default function LoadForm({
                 </div>
 
                 <div>
-                  <Label htmlFor="specialInstructions">Special Instructions</Label>
-                  <Textarea
-                    {...register('specialInstructions')}
-                    placeholder="Any special handling instructions..."
-                    rows={3}
+                  <Label htmlFor="specialInstructions">
+                    Special Instructions
+                  </Label>
+                  <Controller
+                    name="specialInstructions"
+                    control={control}
+                    render={({ field }) => (
+                      <Textarea
+                        rows={3}
+                        placeholder="Any special handling instructions..."
+                        {...field}
+                      />
+                    )}
                   />
                 </div>
-                
-                {/* Navigation Buttons */}
+
                 <div className="flex justify-between pt-4 border-t">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handlePrevTab}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 bg-transparent"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
                     </svg>
                     Back: Locations
                   </Button>
-                  
                   <Button
                     type="button"
                     onClick={handleNextTab}
-                    disabled={!isTabValid('details')}
+                    disabled={!isTabValid("details")}
                     className="flex items-center gap-2"
-                    title={`Validation: Weight=${watchedWeight}, LoadType=${watchedLoadType}, Valid=${isTabValid('details')}`}
+                    title={`Validation: Valid=${isTabValid("details")}`}
                   >
                     Next: Schedule
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </Button>
                 </div>
               </TabsContent>
 
-              {/* Schedule Tab */}
+              {/* Schedule */}
               <TabsContent value="schedule" className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Card>
@@ -953,34 +1181,36 @@ export default function LoadForm({
                     <CardContent className="space-y-4">
                       <div>
                         <Label htmlFor="pickupDate">Pickup Date *</Label>
-                        <Input
-                          {...register('pickupDate', { 
-                            required: 'Pickup date is required',
-                            validate: {
-                              notPast: (v) => {
-                                const today = new Date().toISOString().split('T')[0];
-                                return v >= today || 'Pickup date cannot be in the past';
-                              },
-                              beforeOrEqualDelivery: (v) => {
-                                const d = getValues('deliveryDate');
-                                return !d || v <= d || 'Pickup date cannot be after delivery date';
-                              }
-                            }
-                          })}
-                          type="date"
-                          min={new Date().toISOString().split('T')[0]}
-                          value={getValues('pickupDate') || ''}
-                          onChange={e => setValue('pickupDate', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Controller
+                          name="pickupDate"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="date"
+                              min={new Date().toISOString().split("T")[0]}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                         {errors.pickupDate && (
-                          <p className="text-sm text-red-600 mt-1">{errors.pickupDate.message}</p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.pickupDate.message}
+                          </p>
                         )}
                       </div>
                       <div>
                         <Label htmlFor="pickupTime">Pickup Time</Label>
-                        <Input
-                          {...register('pickupTime')}
-                          type="time"
+                        <Controller
+                          name="pickupTime"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="time"
+                              value={field.value || ""}
+                              onChange={field.onChange}
+                            />
+                          )}
                         />
                       </div>
                     </CardContent>
@@ -996,34 +1226,39 @@ export default function LoadForm({
                     <CardContent className="space-y-4">
                       <div>
                         <Label htmlFor="deliveryDate">Delivery Date *</Label>
-                        <Input
-                          {...register('deliveryDate', { 
-                            required: 'Delivery date is required',
-                            validate: {
-                              notPast: (v) => {
-                                const today = new Date().toISOString().split('T')[0];
-                                return v >= today || 'Delivery date cannot be in the past';
-                              },
-                              afterOrEqualPickup: (v) => {
-                                const p = getValues('pickupDate');
-                                return !p || v >= p || 'Delivery date cannot be before pickup date';
+                        <Controller
+                          name="deliveryDate"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="date"
+                              min={
+                                watchedPickupDate ||
+                                new Date().toISOString().split("T")[0]
                               }
-                            }
-                          })}
-                          type="date"
-                          min={watchedPickupDate || new Date().toISOString().split('T')[0]}
-                          value={getValues('deliveryDate') || ''}
-                          onChange={e => setValue('deliveryDate', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(e.target.value)}
+                            />
+                          )}
                         />
                         {errors.deliveryDate && (
-                          <p className="text-sm text-red-600 mt-1">{errors.deliveryDate.message}</p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.deliveryDate.message}
+                          </p>
                         )}
                       </div>
                       <div>
                         <Label htmlFor="deliveryTime">Delivery Time</Label>
-                        <Input
-                          {...register('deliveryTime')}
-                          type="time"
+                        <Controller
+                          name="deliveryTime"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="time"
+                              value={field.value || ""}
+                              onChange={field.onChange}
+                            />
+                          )}
                         />
                       </div>
                     </CardContent>
@@ -1032,40 +1267,65 @@ export default function LoadForm({
 
                 <div>
                   <Label htmlFor="referenceNumber">Reference Number</Label>
-                  <Input
-                    {...register('referenceNumber')}
-                    placeholder="Internal reference or PO number"
+                  <Controller
+                    name="referenceNumber"
+                    control={control}
+                    render={({ field }) => (
+                      <Input
+                        placeholder="Internal reference or PO number"
+                        {...field}
+                      />
+                    )}
                   />
                 </div>
-                
-                {/* Navigation Buttons */}
+
                 <div className="flex justify-between pt-4 border-t">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handlePrevTab}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 bg-transparent"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
                     </svg>
                     Back: Load Details
                   </Button>
                   <Button
                     type="button"
                     onClick={handleNextTab}
-                    disabled={!isTabValid('schedule')}
+                    disabled={!isTabValid("schedule")}
                     className="flex items-center gap-2"
                   >
                     Next: Contacts
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </Button>
                 </div>
               </TabsContent>
 
-              {/* Contacts Tab */}
+              {/* Contacts */}
               <TabsContent value="contacts" className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Card>
@@ -1077,38 +1337,55 @@ export default function LoadForm({
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div>
-                        <Label htmlFor="pickupContactName">Contact Name *</Label>
-                        <Input
-                          {...register('pickupContactName', { required: 'Pickup contact name is required' })}
-                          placeholder="John Doe"
-                          value={getValues('pickupContactName') || ''}
-                          onChange={e => setValue('pickupContactName', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Label htmlFor="pickupContactName">
+                          Contact Name *
+                        </Label>
+                        <Controller
+                          name="pickupContactName"
+                          control={control}
+                          render={({ field }) => (
+                            <Input placeholder="John Doe" {...field} />
+                          )}
                         />
                         {errors.pickupContactName && (
-                          <p className="text-sm text-red-600 mt-1">{errors.pickupContactName.message}</p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.pickupContactName.message}
+                          </p>
                         )}
                       </div>
                       <div>
-                        <Label htmlFor="pickupContactPhone">Phone Number *</Label>
-                        <Input
-                          {...register('pickupContactPhone', { required: 'Pickup contact phone is required' })}
-                          type="tel"
-                          placeholder="(555) 123-4567"
-                          value={getValues('pickupContactPhone') || ''}
-                          onChange={e => setValue('pickupContactPhone', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Label htmlFor="pickupContactPhone">
+                          Phone Number *
+                        </Label>
+                        <Controller
+                          name="pickupContactPhone"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="tel"
+                              placeholder="(555) 123-4567"
+                              {...field}
+                            />
+                          )}
                         />
                         {errors.pickupContactPhone && (
-                          <p className="text-sm text-red-600 mt-1">{errors.pickupContactPhone.message}</p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.pickupContactPhone.message}
+                          </p>
                         )}
                       </div>
                       <div>
                         <Label htmlFor="pickupContactEmail">Email</Label>
-                        <Input
-                          {...register('pickupContactEmail')}
-                          type="email"
-                          placeholder="john@company.com"
-                          value={getValues('pickupContactEmail') || ''}
-                          onChange={e => setValue('pickupContactEmail', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Controller
+                          name="pickupContactEmail"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="email"
+                              placeholder="john@company.com"
+                              {...field}
+                            />
+                          )}
                         />
                       </div>
                     </CardContent>
@@ -1123,88 +1400,102 @@ export default function LoadForm({
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div>
-                        <Label htmlFor="deliveryContactName">Contact Name *</Label>
-                        <Input
-                          {...register('deliveryContactName', { required: 'Delivery contact name is required' })}
-                          placeholder="Jane Smith"
-                          value={getValues('deliveryContactName') || ''}
-                          onChange={e => setValue('deliveryContactName', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Label htmlFor="deliveryContactName">
+                          Contact Name *
+                        </Label>
+                        <Controller
+                          name="deliveryContactName"
+                          control={control}
+                          render={({ field }) => (
+                            <Input placeholder="Jane Smith" {...field} />
+                          )}
                         />
                         {errors.deliveryContactName && (
-                          <p className="text-sm text-red-600 mt-1">{errors.deliveryContactName.message}</p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.deliveryContactName.message}
+                          </p>
                         )}
                       </div>
                       <div>
-                        <Label htmlFor="deliveryContactPhone">Phone Number *</Label>
-                        <Input
-                          {...register('deliveryContactPhone', { required: 'Delivery contact phone is required' })}
-                          type="tel"
-                          placeholder="(555) 987-6543"
-                          value={getValues('deliveryContactPhone') || ''}
-                          onChange={e => setValue('deliveryContactPhone', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Label htmlFor="deliveryContactPhone">
+                          Phone Number *
+                        </Label>
+                        <Controller
+                          name="deliveryContactPhone"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="tel"
+                              placeholder="(555) 987-6543"
+                              {...field}
+                            />
+                          )}
                         />
                         {errors.deliveryContactPhone && (
-                          <p className="text-sm text-red-600 mt-1">{errors.deliveryContactPhone.message}</p>
+                          <p className="text-sm text-red-600 mt-1">
+                            {errors.deliveryContactPhone.message}
+                          </p>
                         )}
                       </div>
                       <div>
                         <Label htmlFor="deliveryContactEmail">Email</Label>
-                        <Input
-                          {...register('deliveryContactEmail')}
-                          type="email"
-                          placeholder="jane@company.com"
-                          value={getValues('deliveryContactEmail') || ''}
-                          onChange={e => setValue('deliveryContactEmail', e.target.value, { shouldValidate: true, shouldDirty: true })}
+                        <Controller
+                          name="deliveryContactEmail"
+                          control={control}
+                          render={({ field }) => (
+                            <Input
+                              type="email"
+                              placeholder="jane@company.com"
+                              {...field}
+                            />
+                          )}
                         />
                       </div>
                     </CardContent>
                   </Card>
                 </div>
-                
-                {/* Navigation Buttons */}
+
+                <Separator />
+
                 <div className="flex justify-between pt-4 border-t">
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handlePrevTab}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 bg-transparent"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 19l-7-7 7-7"
+                      />
                     </svg>
                     Back: Schedule
                   </Button>
                   <Button
                     type="submit"
-                    disabled={isSubmitting}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                    disabled={isSubmitting || !isValid}
+                    className="flex items-center gap-2"
                   >
                     <Save className="h-4 w-4" />
-                    {isSubmitting 
-                      ? (mode === 'create' ? 'Creating...' : 'Updating...') 
-                      : (mode === 'create' ? 'Create Load' : 'Update Load')
-                    }
+                    {isSubmitting
+                      ? mode === "create"
+                        ? "Creating..."
+                        : "Updating..."
+                      : mode === "create"
+                      ? "Create Load"
+                      : "Update Load"}
                   </Button>
                 </div>
               </TabsContent>
             </Tabs>
-
-            <Separator />
-
-            <div className="flex justify-end space-x-2">
-              {onCancel && (
-                <Button type="button" variant="outline" onClick={onCancel}>
-                  Cancel
-                </Button>
-              )}
-              <Button type="submit" disabled={isSubmitting}>
-                <Save className="h-4 w-4 mr-2" />
-                {isSubmitting 
-                  ? (mode === 'create' ? 'Creating...' : 'Updating...') 
-                  : (mode === 'create' ? 'Create Load' : 'Update Load')
-                }
-              </Button>
-            </div>
           </form>
         </CardContent>
       </Card>

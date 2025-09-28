@@ -25,11 +25,17 @@ import {
 } from 'lucide-react';
 import { MapboxMap } from '@/components/mapbox';
 
+import AddressAutocomplete from '@/components/mapbox/AddressAutocomplete';
+import { LoadLocation } from '@/types/load';
+
 interface LoadWithDistance extends Load {
   distanceFromCarrier?: number;
 }
 
 export default function CarrierLoadsPage() {
+  // Route filter state (must be inside component)
+  const [routeStart, setRouteStart] = useState<LoadLocation | null>(null);
+  const [routeEnd, setRouteEnd] = useState<LoadLocation | null>(null);
   const [loads, setLoads] = useState<LoadWithDistance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,10 +173,16 @@ export default function CarrierLoadsPage() {
       if (userLocation) {
         params.set('userLat', userLocation.lat.toString());
         params.set('userLng', userLocation.lng.toString());
-        // Only apply radius filter if maxDistance is specified
         if (maxDistance) {
           params.set('radius', maxDistance);
         }
+      }
+      // If route filter is set, add route params
+      if (routeStart && routeEnd) {
+        params.set('routeStartLat', routeStart.coordinates.latitude.toString());
+        params.set('routeStartLng', routeStart.coordinates.longitude.toString());
+        params.set('routeEndLat', routeEnd.coordinates.latitude.toString());
+        params.set('routeEndLng', routeEnd.coordinates.longitude.toString());
       }
 
       const response = await fetchWithAuth(`/api/loads?${params}`);
@@ -218,7 +230,7 @@ export default function CarrierLoadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, sortBy, equipmentFilter, maxDistance, userLocation]);
+  }, [isAuthenticated, sortBy, equipmentFilter, maxDistance, userLocation, routeStart, routeEnd]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -321,6 +333,47 @@ export default function CarrierLoadsPage() {
       </div>
 
       {/* Filters */}
+      {/* Route Filter */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Navigation className="h-5 w-5" />
+            Filter Loads by Route
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Route Start</Label>
+              <AddressAutocomplete
+                value={routeStart ?? undefined}
+                onChange={setRouteStart}
+                placeholder="Enter starting city"
+                types="place"
+              />
+            </div>
+            <div>
+              <Label>Route End</Label>
+              <AddressAutocomplete
+                value={routeEnd ?? undefined}
+                onChange={setRouteEnd}
+                placeholder="Enter ending city"
+                types="place"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Button onClick={fetchLoads} disabled={!routeStart || !routeEnd}>
+              Apply Route Filter
+            </Button>
+            <Button variant="outline" onClick={() => { setRouteStart(null); setRouteEnd(null); fetchLoads(); }}>
+              Clear Route Filter
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Other Filters */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

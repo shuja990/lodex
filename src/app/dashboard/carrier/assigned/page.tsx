@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Load } from '@/types/load';
 import { useAuthStore, fetchWithAuth } from '@/store/auth';
+import { useToast } from '@/components/ui/use-toast';
 import { 
   MapPin, 
   Truck, 
@@ -19,6 +20,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 const LoadChat = dynamic(() => import('@/components/chat/load-chat'), { ssr: false });
+import { MapboxMap } from '@/components/mapbox';
 
 export default function AssignedLoadsPage() {
   const [loads, setLoads] = useState<Load[]>([]);
@@ -26,6 +28,7 @@ export default function AssignedLoadsPage() {
   const [error, setError] = useState<string | null>(null);
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null);
   const { isAuthenticated } = useAuthStore();
+  const { toast } = useToast();
 
   // Fetch assigned loads
   const fetchAssignedLoads = useCallback(async () => {
@@ -73,8 +76,17 @@ export default function AssignedLoadsPage() {
       // Refresh the loads list
       await fetchAssignedLoads();
       
+      toast({
+        title: "Success",
+        description: "Load status updated successfully",
+      });
+      
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to update status');
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : 'Failed to update status',
+        variant: "destructive",
+      });
     } finally {
       setUpdatingStatus(null);
     }
@@ -267,6 +279,58 @@ export default function AssignedLoadsPage() {
                         <p className="text-sm text-orange-600">{load.details.specialInstructions}</p>
                       </div>
                     )}
+                    
+                    {/* Load Route Map */}
+                    <div className="mt-4">
+                      <h4 className="font-medium mb-3 flex items-center gap-2">
+                        <MapPin className="h-4 w-4" />
+                        Route Map
+                      </h4>
+                      <div className="rounded-lg overflow-hidden border">
+                        <MapboxMap
+                          height="400px"
+                          center={[
+                            (load.origin.coordinates.longitude + load.destination.coordinates.longitude) / 2,
+                            (load.origin.coordinates.latitude + load.destination.coordinates.latitude) / 2
+                          ]}
+                          zoom={6}
+                          markers={[
+                            {
+                              coordinates: [
+                                load.origin.coordinates.longitude,
+                                load.origin.coordinates.latitude,
+                              ] as [number, number],
+                              color: "#10B981",
+                              id: `origin-${load._id}`,
+                              popup: `Pickup: ${load.origin.city}, ${load.origin.state}`
+                            },
+                            {
+                              coordinates: [
+                                load.destination.coordinates.longitude,
+                                load.destination.coordinates.latitude,
+                              ] as [number, number],
+                              color: "#EF4444",
+                              id: `destination-${load._id}`,
+                              popup: `Delivery: ${load.destination.city}, ${load.destination.state}`
+                            }
+                          ]}
+                          route={[
+                            [load.origin.coordinates.longitude, load.origin.coordinates.latitude],
+                            [load.destination.coordinates.longitude, load.destination.coordinates.latitude]
+                          ]}
+                          bounds={[
+                            [
+                              Math.min(load.origin.coordinates.longitude, load.destination.coordinates.longitude) - 0.3,
+                              Math.min(load.origin.coordinates.latitude, load.destination.coordinates.latitude) - 0.3
+                            ],
+                            [
+                              Math.max(load.origin.coordinates.longitude, load.destination.coordinates.longitude) + 0.3,
+                              Math.max(load.origin.coordinates.latitude, load.destination.coordinates.latitude) + 0.3
+                            ]
+                          ]}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   {/* Contact Information, Status Update & Chat */}

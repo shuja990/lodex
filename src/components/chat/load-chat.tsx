@@ -44,7 +44,13 @@ export const LoadChat: React.FC<LoadChatProps> = ({ loadId, disabled = false, cl
       }
       const data = await res.json();
       if (data.messages?.length) {
-        setMessages(prev => [...prev, ...data.messages!]);
+        if (since) {
+          // Incremental fetch - append new messages
+          setMessages(prev => [...prev, ...data.messages!]);
+        } else {
+          // Initial fetch - replace all messages
+          setMessages(data.messages!);
+        }
         const last = data.messages[data.messages.length - 1];
         setSince(last.createdAt);
         scrollToBottom();
@@ -58,6 +64,12 @@ export const LoadChat: React.FC<LoadChatProps> = ({ loadId, disabled = false, cl
       setLoading(false);
     }
   }, [loadId, since]);
+
+  // Reset chat state when loadId changes
+  useEffect(() => {
+    setMessages([]);
+    setSince(null);
+  }, [loadId]);
 
   useEffect(() => {
     fetchMessages();
@@ -81,10 +93,10 @@ export const LoadChat: React.FC<LoadChatProps> = ({ loadId, disabled = false, cl
         throw new Error(data.message || 'Failed to send');
       }
       const data = await res.json();
-      if (data.messages?.length) {
-        setMessages(prev => [...prev, ...data.messages]);
-        const last = data.messages[data.messages.length - 1];
-        setSince(last.createdAt);
+      if (data.message) {
+        // Only add the new message sent, not all messages
+        setMessages(prev => [...prev, data.message]);
+        setSince(data.message.createdAt);
         scrollToBottom();
       }
       setInput('');

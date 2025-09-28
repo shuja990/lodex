@@ -17,6 +17,7 @@ export interface AddressAutocompleteProps {
   error?: string;
   required?: boolean;
   label?: string;
+  types?: string; // e.g. 'place' for city, 'address' for address
 }
 
 export default function AddressAutocomplete({
@@ -27,7 +28,8 @@ export default function AddressAutocomplete({
   disabled = false,
   error,
   required = false,
-  label
+  label,
+  types = 'address,poi'
 }: AddressAutocompleteProps) {
   const [query, setQuery] = useState(value?.address || '');
   const [suggestions, setSuggestions] = useState<MapboxFeature[]>([]);
@@ -58,7 +60,7 @@ export default function AddressAutocomplete({
       }
 
       const encodedQuery = encodeURIComponent(searchQuery);
-      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&country=US&types=address,poi&limit=5`;
+      const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodedQuery}.json?access_token=${accessToken}&country=US&types=${types}&limit=5`;
       
       const response = await fetch(url);
       if (!response.ok) {

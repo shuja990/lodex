@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { authenticateUser } from '@/lib/auth';
 import Load from '@/models/Load';
 import mongoose from 'mongoose';
+import { z } from 'zod';
 
 // GET /api/loads/[loadId] - Get a specific load by ID
 export async function GET(request: NextRequest, { params }: { params: { loadId: string } }) {
@@ -65,17 +66,17 @@ export async function PUT(request: NextRequest, { params }: { params: { loadId: 
       return NextResponse.json({ success: false, message: 'Invalid Load ID' }, { status: 400 });
     }
 
-    const body = await request.json();
-    const { status } = body;
+  const body = await request.json();
+  const { status } = body as { status?: string };
 
   // Validate status (carrier cannot directly mark final delivered, only delivered_pending first)
   const validStatuses = ['assigned', 'in_transit', 'delivered_pending', 'delivered', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Invalid status. Must be one of: ' + validStatuses.join(', ') 
-      }, { status: 400 });
-    }
+  if (status !== undefined && !validStatuses.includes(status)) {
+    return NextResponse.json({ 
+      success: false, 
+      message: 'Invalid status. Must be one of: ' + validStatuses.join(', ') 
+    }, { status: 400 });
+  }
 
     const load = await Load.findById(loadId);
 
@@ -84,7 +85,7 @@ export async function PUT(request: NextRequest, { params }: { params: { loadId: 
     }
 
     // Role-based status transition rules
-    if (user.role === 'carrier') {
+    if (user.role === 'carrier' || user.role === 'driver') {
       if (!load.carrierId || load.carrierId.toString() !== user._id.toString()) {
         return NextResponse.json({ success: false, message: 'Only the assigned carrier can update load status' }, { status: 403 });
       }
@@ -99,23 +100,59 @@ export async function PUT(request: NextRequest, { params }: { params: { loadId: 
         }
       }
     } else if (user.role === 'shipper') {
-      // Shipper can cancel posted/assigned/in_transit/delivered_pending (not after final delivered)
+      // Allow shipper to edit load details if not assigned
+      if (!load.carrierId && body.origin) {
+        // Validate payload via zod
+        const loadSchema = z.object({
+          origin: z.object({ address: z.string(), city: z.string(), state: z.string(), zipCode: z.string(), coordinates: z.object({ latitude: z.number(), longitude: z.number() }) }),
+          destination: z.object({ address: z.string(), city: z.string(), state: z.string(), zipCode: z.string(), coordinates: z.object({ latitude: z.number(), longitude: z.number() }) }),
+          loadType: z.string(),
+          equipmentType: z.string(),
+          details: z.object({ weight: z.number(), length: z.number().optional(), width: z.number().optional(), height: z.number().optional(), pieces: z.number().optional(), description: z.string(), specialInstructions: z.string().optional(), hazmat: z.boolean().optional(), temperatureControlled: z.boolean().optional(), temperatureRange: z.object({ min: z.number().optional(), max: z.number().optional() }).optional() }),
+          pickupDate: z.string(),
+          deliveryDate: z.string(),
+          pickupTime: z.string().optional(),
+          deliveryTime: z.string().optional(),
+          rate: z.number(),
+          contactInfo: z.object({ pickup: z.object({ name: z.string(), phone: z.string(), email: z.string().optional() }), delivery: z.object({ name: z.string(), phone: z.string(), email: z.string().optional() }) }),
+          referenceNumber: z.string().optional()
+        });
+        const parsed = loadSchema.safeParse(body);
+        if (!parsed.success) {
+          return NextResponse.json({ success: false, message: parsed.error.message }, { status: 400 });
+        }
+        const data = parsed.data;
+        // apply updates
+        load.origin = data.origin;
+        load.destination = data.destination;
+        load.loadType = data.loadType;
+        load.equipmentType = data.equipmentType;
+        load.details = data.details;
+        load.pickupDate = new Date(data.pickupDate);
+        load.deliveryDate = new Date(data.deliveryDate);
+        load.pickupTime = data.pickupTime;
+        load.deliveryTime = data.deliveryTime;
+        load.rate = data.rate;
+        load.referenceNumber = data.referenceNumber;
+  load.contactInfo = data.contactInfo;
+        await load.save();
+        return NextResponse.json({ success: true, message: 'Load updated successfully', load });
+      }
+      // Shipper status transitions and cancel/deliver logic
       if (status === 'cancelled') {
         if (load.shipperId.toString() !== user._id.toString()) {
           return NextResponse.json({ success: false, message: 'Cannot cancel a load you do not own' }, { status: 403 });
         }
       } else if (status === 'delivered') {
-        // Shipper can approve delivered_pending -> delivered
         if (load.status !== 'delivered_pending') {
           return NextResponse.json({ success: false, message: 'Load must be awaiting delivery approval' }, { status: 400 });
         }
       } else if (status === 'in_transit') {
-        // Shipper rejecting delivered_pending moves it back
         if (load.status !== 'delivered_pending') {
           return NextResponse.json({ success: false, message: 'Can only revert a pending delivery back to in transit' }, { status: 400 });
         }
       } else {
-        return NextResponse.json({ success: false, message: 'Shippers can only approve or reject delivery or cancel the load' }, { status: 403 });
+        return NextResponse.json({ success: false, message: 'Shippers can only edit details or manage delivery/cancel', }, { status: 403 });
       }
     } else if (user.role !== 'admin') {
       return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 403 });

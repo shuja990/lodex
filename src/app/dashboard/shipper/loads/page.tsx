@@ -16,7 +16,8 @@ import {
   Clock,
   Eye,
   Plus,
-  AlertCircle
+  AlertCircle,
+  Edit
 } from 'lucide-react';
 
 export default function ShipperLoadsPage() {
@@ -192,12 +193,22 @@ export default function ShipperLoadsPage() {
                   <p className="text-sm text-gray-600 line-clamp-2">{load.details.description}</p>
                 )}
 
-                <Link href={`/dashboard/shipper/loads/${load._id}`}>
-                  <Button className="w-full">
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Details & Offers
-                  </Button>
-                </Link>
+                <div className="space-y-2">
+                  <Link href={`/dashboard/shipper/loads/${load._id}`}>   
+                    <Button className="w-full">
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Details & Offers
+                    </Button>
+                  </Link>
+                  { !load.carrierId && (
+                    <Link href={`/dashboard/shipper/loads/${load._id}/edit`}>   
+                      <Button variant="outline" className="w-full mt-2">
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit Load
+                      </Button>
+                    </Link>
+                  ) }
+                </div>
               </CardContent>
             </Card>
           ))}
