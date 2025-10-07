@@ -1,8 +1,8 @@
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Truck, MapPin, Clock, Shield, Star, ArrowRight, CheckCircle, Users, Package, Route } from "lucide-react"
+import { Truck, MapPin, Clock, Shield, Star, CheckCircle, Users, Package, Route } from "lucide-react"
+import { SmartCTAButton } from "@/components/smart-cta-button"
 
 export default function HomePage() {
   return (
@@ -41,15 +41,30 @@ export default function HomePage() {
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button asChild size="lg" className="text-lg px-8">
-                  <Link href="/auth?type=shipper">
-                    Post a Load
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" size="lg" className="text-lg px-8 bg-transparent">
-                  <Link href="/auth?type=carrier">Join as a Carrier</Link>
-                </Button>
+                <SmartCTAButton
+                  defaultText="Post a Load"
+                  shipperText="Go to Dashboard"
+                  carrierText="Browse Loads"
+                  defaultHref="/auth?type=shipper"
+                  shipperHref="/dashboard/shipper"
+                  carrierHref="/dashboard/carrier/loads"
+                  size="lg"
+                  className="text-lg px-8"
+                  targetRole="shipper"
+                />
+                <SmartCTAButton
+                  defaultText="Join as a Carrier"
+                  shipperText="Find Carriers"
+                  carrierText="Go to Dashboard"
+                  defaultHref="/auth?type=carrier"
+                  shipperHref="/dashboard/shipper"
+                  carrierHref="/dashboard/carrier"
+                  variant="outline"
+                  size="lg"
+                  className="text-lg px-8 bg-transparent"
+                  showIcon={false}
+                  targetRole="carrier"
+                />
               </div>
 
               <div className="pt-4">
@@ -232,20 +247,31 @@ export default function HomePage() {
                 Join thousands of shippers and carriers who trust LodEx for their micro-load needs.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Button asChild size="lg" variant="secondary" className="text-lg px-8">
-                  <Link href="/auth?type=shipper">
-                    Get Started as Shipper
-                    <ArrowRight className="ml-2 h-5 w-5" />
-                  </Link>
-                </Button>
-                <Button
-                  asChild
+                <SmartCTAButton
+                  defaultText="Get Started as Shipper"
+                  shipperText="Go to Dashboard"
+                  carrierText="Browse Available Loads"
+                  defaultHref="/auth?type=shipper"
+                  shipperHref="/dashboard/shipper"
+                  carrierHref="/dashboard/carrier/loads"
+                  variant="secondary"
                   size="lg"
+                  className="text-lg px-8"
+                  targetRole="shipper"
+                />
+                <SmartCTAButton
+                  defaultText="Join as Carrier"
+                  shipperText="Post a Load"
+                  carrierText="Go to Dashboard"
+                  defaultHref="/auth?type=carrier"
+                  shipperHref="/dashboard/shipper/post-load"
+                  carrierHref="/dashboard/carrier"
                   variant="outline"
+                  size="lg"
                   className="text-lg px-8 border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground hover:text-primary bg-transparent"
-                >
-                  <Link href="/auth?type=carrier">Join as Carrier</Link>
-                </Button>
+                  showIcon={false}
+                  targetRole="carrier"
+                />
               </div>
             </div>
           </div>

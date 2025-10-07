@@ -2,7 +2,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Gift, Users, TrendingDown, CheckCircle, ArrowRight, Percent, CreditCard } from "lucide-react"
+import { Gift, Users, TrendingDown, CheckCircle, Percent, CreditCard } from "lucide-react"
+import { SmartCTAButton } from "@/components/smart-cta-button"
 
 export default function PricingPage() {
   return (
@@ -111,12 +112,17 @@ export default function PricingPage() {
                       </div>
                     </div>
 
-                    <Button asChild size="lg" className="w-full">
-                      <Link href="/auth?type=shipper">
-                        Start Shipping Free
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </Link>
-                    </Button>
+                    <SmartCTAButton
+                      defaultText="Start Shipping Free"
+                      shipperText="Go to Dashboard"
+                      carrierText="Browse Available Loads"
+                      defaultHref="/auth?type=shipper"
+                      shipperHref="/dashboard/shipper"
+                      carrierHref="/dashboard/carrier/loads"
+                      size="lg"
+                      className="w-full"
+                      targetRole="shipper"
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -339,12 +345,17 @@ export default function PricingPage() {
               Start with free load posting and pay only when your shipments are delivered successfully.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Button asChild size="lg" variant="secondary">
-                <Link href="/auth?type=shipper">
-                  Post Your First Load
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+              <SmartCTAButton
+                defaultText="Post Your First Load"
+                shipperText="Post a Load"
+                carrierText="Browse Available Loads"
+                defaultHref="/auth?type=shipper"
+                shipperHref="/dashboard/shipper/post-load"
+                carrierHref="/dashboard/carrier/loads"
+                variant="secondary"
+                size="lg"
+                targetRole="shipper"
+              />
               <Button
                 asChild
                 size="lg"

@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -8,12 +7,12 @@ import {
   DollarSign,
   BarChart3,
   Star,
-  ArrowRight,
   Package,
   Route,
   Shield,
   Target,
 } from "lucide-react"
+import { SmartCTAButton } from "@/components/smart-cta-button"
 
 export default function ForShippersPage() {
   return (
@@ -30,12 +29,16 @@ export default function ForShippersPage() {
               Reduce empty miles, increase efficiency, and ship small loads reliably with LodEx's verified carrier
               network.
             </p>
-            <Button asChild size="lg">
-              <Link href="/auth?type=shipper">
-                Start Shipping Today
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-            </Button>
+            <SmartCTAButton
+              defaultText="Start Shipping Today"
+              shipperText="Go to Dashboard"
+              carrierText="Browse Available Loads"
+              defaultHref="/auth?type=shipper"
+              shipperHref="/dashboard/shipper"
+              carrierHref="/dashboard/carrier/loads"
+              size="lg"
+              targetRole="shipper"
+            />
           </div>
         </div>
       </section>
@@ -330,20 +333,30 @@ export default function ForShippersPage() {
               Join thousands of shippers who have reduced costs and improved efficiency with LodEx.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Button asChild size="lg" variant="secondary">
-                <Link href="/auth?type=shipper">
-                  Start Shipping Now
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
-              <Button
-                asChild
+              <SmartCTAButton
+                defaultText="Start Shipping Now"
+                shipperText="Post a Load"
+                carrierText="Browse Available Loads"
+                defaultHref="/auth?type=shipper"
+                shipperHref="/dashboard/shipper/post-load"
+                carrierHref="/dashboard/carrier/loads"
+                variant="secondary"
                 size="lg"
+                targetRole="shipper"
+              />
+              <SmartCTAButton
+                defaultText="Post Your First Load"
+                shipperText="View My Loads"
+                carrierText="Find Loads"
+                defaultHref="/post-load"
+                shipperHref="/dashboard/shipper"
+                carrierHref="/dashboard/carrier/loads"
                 variant="outline"
+                size="lg"
                 className="border-primary-foreground/20 text-primary-foreground hover:bg-primary-foreground hover:text-primary bg-transparent"
-              >
-                <Link href="/post-load">Post Your First Load</Link>
-              </Button>
+                showIcon={false}
+                targetRole="shipper"
+              />
             </div>
           </div>
         </div>

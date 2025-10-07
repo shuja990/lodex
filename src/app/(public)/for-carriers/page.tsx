@@ -8,12 +8,12 @@ import {
   TrendingUp,
   Star,
   Gift,
-  ArrowRight,
   Route,
   Shield,
   Users,
   CheckCircle,
 } from "lucide-react"
+import { SmartCTAButton } from "@/components/smart-cta-button"
 
 export default function ForCarriersPage() {
   return (
@@ -29,12 +29,17 @@ export default function ForCarriersPage() {
             <p className="text-xl text-muted-foreground text-pretty leading-relaxed">
               Maximize your vehicle utilization and earn extra income by carrying micro-loads along your planned routes.
             </p>
-            <Button asChild size="lg" variant="secondary">
-              <Link href="/auth?type=carrier">
-                Join as Carrier
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </Link>
-            </Button>
+            <SmartCTAButton
+              defaultText="Join as Carrier"
+              shipperText="Post a Load"
+              carrierText="Go to Dashboard"
+              defaultHref="/auth?type=carrier"
+              shipperHref="/dashboard/shipper/post-load"
+              carrierHref="/dashboard/carrier"
+              variant="secondary"
+              size="lg"
+              targetRole="carrier"
+            />
           </div>
         </div>
       </section>
@@ -389,12 +394,17 @@ export default function ForCarriersPage() {
               Join thousands of carriers who are maximizing their earning potential with LodEx.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-              <Button asChild size="lg" variant="secondary">
-                <Link href="/auth?type=carrier">
-                  Sign Up as Carrier
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
+              <SmartCTAButton
+                defaultText="Sign Up as Carrier"
+                shipperText="Post a Load"
+                carrierText="Browse Available Loads"
+                defaultHref="/auth?type=carrier"
+                shipperHref="/dashboard/shipper/post-load"
+                carrierHref="/dashboard/carrier/loads"
+                variant="secondary"
+                size="lg"
+                targetRole="carrier"
+              />
               <Button
                 asChild
                 size="lg"

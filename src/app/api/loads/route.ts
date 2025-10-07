@@ -242,14 +242,82 @@ export async function GET(request: NextRequest) {
 
     // If route filter is set, filter loads in JS
     if (routeFilter) {
+      const routeRadius = 100; // miles - how far from the route line a load can be to match
+      
       allLoads = allLoads.filter(load => {
         const o = load.origin?.coordinates;
         const d = load.destination?.coordinates;
         if (!o || !d) return false;
-        const distOriginToStart = haversine(o.latitude, o.longitude, routeFilter.startLat, routeFilter.startLng);
-        const distDestToEnd = haversine(d.latitude, d.longitude, routeFilter.endLat, routeFilter.endLng);
-        // Only show if origin is near route start OR destination is near route end (within 100 miles)
-        return distOriginToStart <= 100 || distDestToEnd <= 100;
+        
+        // Check if load is along the searched route
+        // Strategy: A load matches if:
+        // 1. Its origin AND destination both fall within a corridor along the searched route
+        // 2. The load is generally moving in the same direction as the search route
+        
+        const searchStartLat = routeFilter.startLat;
+        const searchStartLng = routeFilter.startLng;
+        const searchEndLat = routeFilter.endLat;
+        const searchEndLng = routeFilter.endLng;
+        
+        // Calculate if load origin and destination are near the route corridor
+        const distOriginToRouteStart = haversine(o.latitude, o.longitude, searchStartLat, searchStartLng);
+        const distDestToRouteEnd = haversine(d.latitude, d.longitude, searchEndLat, searchEndLng);
+        
+        // Calculate distance from load origin/dest to the route line using perpendicular distance
+        function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+          const A = px - x1;
+          const B = py - y1;
+          const C = x2 - x1;
+          const D = y2 - y1;
+          
+          const dot = A * C + B * D;
+          const lenSq = C * C + D * D;
+          let param = -1;
+          
+          if (lenSq !== 0) param = dot / lenSq;
+          
+          let xx, yy;
+          
+          if (param < 0) {
+            xx = x1;
+            yy = y1;
+          } else if (param > 1) {
+            xx = x2;
+            yy = y2;
+          } else {
+            xx = x1 + param * C;
+            yy = y1 + param * D;
+          }
+          
+          return haversine(px, py, xx, yy);
+        }
+        
+        const distOriginToRouteLine = distanceToSegment(
+          o.latitude, o.longitude,
+          searchStartLat, searchStartLng,
+          searchEndLat, searchEndLng
+        );
+        
+        const distDestToRouteLine = distanceToSegment(
+          d.latitude, d.longitude,
+          searchStartLat, searchStartLng,
+          searchEndLat, searchEndLng
+        );
+        
+        // A load matches if:
+        // Both origin and destination are within the route corridor
+        const isAlongRoute = distOriginToRouteLine <= routeRadius && distDestToRouteLine <= routeRadius;
+        
+        // Or if the load spans the route (origin near start, dest near end)
+        const spansRoute = distOriginToRouteStart <= routeRadius && distDestToRouteEnd <= routeRadius;
+        
+        // Or if the load is a segment of the route
+        const isRouteSegment = (
+          (distOriginToRouteStart <= routeRadius || distOriginToRouteLine <= routeRadius) &&
+          (distDestToRouteEnd <= routeRadius || distDestToRouteLine <= routeRadius)
+        );
+        
+        return isAlongRoute || spansRoute || isRouteSegment;
       });
     }
 
